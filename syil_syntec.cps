@@ -1378,6 +1378,9 @@ function onSection() {
     }
   }
 
+  // set coolant after tool change, before positiong wcs
+  setCoolant(tool.coolant);
+
   // wcs
   if (insertToolCall || operationNeedsSafeStart) { // force work offset when changing tool
     currentWorkOffset = undefined;
@@ -1500,8 +1503,6 @@ function onSection() {
       yOutput.format(initialPosition.y)
     );
   }
-  // set coolant after we have positioned at Z
-  setCoolant(tool.coolant);
 
   validate(lengthCompensationActive, "Length compensation is not active.");
 
