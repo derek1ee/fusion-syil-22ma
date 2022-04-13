@@ -199,6 +199,22 @@ properties = {
     ],
     value: "G28",
     scope: "post"
+  },
+  breakControl: {
+    title      : "Break control",
+    description: "Detect broken tool",
+    type       : "boolean",
+    group      : 2,
+    value      : true,
+    scope:     "post"
+  },
+  thermalComp: {
+    title      : "Thermal comp",
+    description: "Measure and apply thermal comp",
+    type       : "boolean",
+    group      : 2,
+    value      : true,
+    scope:     "post"
   }
 };
 
@@ -392,6 +408,52 @@ function formatComment(text) {
 */
 function writeComment(text) {
   writeln(formatComment(text));
+}
+
+function airBlastETS() {
+  writeBlock(mFormat.format(17));
+  onDwell(1);
+  writeBlock(mFormat.format(18));
+}
+
+function checkCurrentTool(tool) {
+  writeComment("TOOL BREAK CONTROL");
+
+  airBlastETS();
+
+  // G65P9921M23.C0.T[tool].
+  writeBlock(gFormat.format(65),
+  "P" + 9921,
+  "M" + ijkFormat.format(23),
+  "C" + ijkFormat.format(0),
+  "T" + ijkFormat.format(tool.number));
+}
+
+var measureNextTool = false;
+function measureCurrentTool(tool) {
+  writeComment("MEASURE TOOL LENGTH");
+
+  airBlastETS();
+
+  // G65P9921M21.C0.T[tool].
+  writeBlock(gFormat.format(65),
+  "P" + 9921,
+  "M" + ijkFormat.format(21),
+  "C" + ijkFormat.format(0),
+  "T" + ijkFormat.format(tool.number));
+}
+
+function thermalCompTool(tool) {
+  writeComment("MEASURE AND APPLY THERMAL COMP");
+
+  airBlastETS();
+  
+  // G65P9921M24.C0.T[tool].
+  writeBlock(gFormat.format(65),
+             "P" + 9921,
+             "M" + ijkFormat.format(24),
+             "C" + ijkFormat.format(0),
+             "T" + ijkFormat.format(tool.number));
 }
 
 function onOpen() {
@@ -1242,12 +1304,8 @@ function onSection() {
   initializeSmoothing();
 
   if (insertToolCall || newWorkOffset || newWorkPlane || smoothing.cancel) {
-
-    // stop spindle before retract during tool change
-    if (insertToolCall && !isFirstSection()) {
-      onCommand(COMMAND_STOP_SPINDLE);
-    }
     disableLengthCompensation();
+    
     if (cancelTiltFirst) {
       skipBlock = _skipBlock;
       cancelWorkPlane();
@@ -1303,8 +1361,8 @@ function onSection() {
 
     if (!isFirstSection() && insertToolCall) {
       forceWorkPlane();
-      onCommand(COMMAND_COOLANT_OFF);
     }
+
     if (!isFirstSection() && getProperty("optionalStop") && insertToolCall) {
       onCommand(COMMAND_OPTIONAL_STOP);
     }
@@ -1336,6 +1394,13 @@ function onSection() {
         }
         writeComment(localize("ZMIN") + "=" + zRange.getMinimum());
       }
+    }
+
+    if (measureNextTool) {
+      measureCurrentTool(tool);
+      measureNextTool = false;
+    } else if (getProperty("thermalComp")) {
+      thermalCompTool(tool);
     }
 
     if (getProperty("preloadTool")) {
@@ -2216,8 +2281,10 @@ function onCommand(command) {
   case COMMAND_STOP_CHIP_TRANSPORT:
     return;
   case COMMAND_BREAK_CONTROL:
+    checkCurrentTool(tool);
     return;
   case COMMAND_TOOL_MEASURE:
+    measureNextTool = true;
     return;
   case COMMAND_PROBE_ON:
     return;
@@ -2240,10 +2307,16 @@ function onSectionEnd() {
   }
   writeBlock(gPlaneModal.format(17));
 
-  if (((getCurrentSectionId() + 1) >= getNumberOfSections()) ||
-      (tool.number != getNextSection().getTool().number)) {
-    onCommand(COMMAND_BREAK_CONTROL);
+  if (((getCurrentSectionId() + 1) >= getNumberOfSections())
+        || (tool.number != getNextSection().getTool().number)) {
+          onCommand(COMMAND_COOLANT_OFF);
+          onCommand(COMMAND_STOP_SPINDLE);
+
+          if (tool.getBreakControl() && getProperty("breakControl")) {
+            onCommand(COMMAND_BREAK_CONTROL);
+          }
   }
+
   if (!isLastSection() && (getNextSection().getTool().coolant != tool.coolant)) {
     setCoolant(COOLANT_OFF);
   }
