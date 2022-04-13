@@ -206,7 +206,7 @@ properties = {
     type       : "boolean",
     group      : 2,
     value      : true,
-    scope:     "post"
+    scope      : "post"
   },
   thermalComp: {
     title      : "Thermal comp",
@@ -214,7 +214,15 @@ properties = {
     type       : "boolean",
     group      : 2,
     value      : true,
-    scope:     "post"
+    scope      : "post"
+  },
+  etsAirBlast: {
+    title      : "ETS air blast",
+    description: "Air blast tool setter contact surface before measurement",
+    type       : "boolean",
+    group      : 2,
+    value      : true,
+    scope      : "post"
   }
 };
 
@@ -419,7 +427,9 @@ function airBlastETS() {
 function checkCurrentTool(tool) {
   writeComment("TOOL BREAK CONTROL");
 
-  airBlastETS();
+  if (getProperty("etsAirBlast")) {
+    airBlastETS();
+  }
 
   // G65P9921M23.C0.T[tool].
   writeBlock(gFormat.format(65),
@@ -433,20 +443,40 @@ var measureNextTool = false;
 function measureCurrentTool(tool) {
   writeComment("MEASURE TOOL LENGTH");
 
-  airBlastETS();
+  if (getProperty("etsAirBlast")) {
+    airBlastETS();
+  }
 
+  // Renishaw cycle
   // G65P9921M21.C0.T[tool].
   writeBlock(gFormat.format(65),
-  "P" + 9921,
-  "M" + ijkFormat.format(21),
-  "C" + ijkFormat.format(0),
-  "T" + ijkFormat.format(tool.number));
+             "P" + 9921,
+             "M" + ijkFormat.format(21),
+             "C" + ijkFormat.format(0),
+             "T" + ijkFormat.format(tool.number));
+
+  // Pioneer cycle - diameter only
+  // G65P7002T1.S6.
+  // writeBlock(gFormat.format(65),
+  //            "P" + 7002,
+  //            "T" + ijkFormat.format(tool.number),
+  //            "S" + ijkFormat.format(tool.diameter));
+
+  // Pioneer cycle - diameter & radius
+  // G65P7002T1.D1.S6.
+  // writeBlock(gFormat.format(65),
+  //            "P" + 7002,
+  //            "T" + ijkFormat.format(tool.number),
+  //            "D" + ijkFormat.format(tool.number),
+  //            "S" + ijkFormat.format(tool.diameter));
 }
 
 function thermalCompTool(tool) {
   writeComment("MEASURE AND APPLY THERMAL COMP");
 
-  airBlastETS();
+  if (getProperty("etsAirBlast")) {
+    airBlastETS();
+  }
   
   // G65P9921M24.C0.T[tool].
   writeBlock(gFormat.format(65),
@@ -1305,7 +1335,7 @@ function onSection() {
 
   if (insertToolCall || newWorkOffset || newWorkPlane || smoothing.cancel) {
     disableLengthCompensation();
-    
+
     if (cancelTiltFirst) {
       skipBlock = _skipBlock;
       cancelWorkPlane();
