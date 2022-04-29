@@ -278,7 +278,13 @@ var gFeedModeModal = createModal({}, gFormat); // modal group 5 // G94-95
 var gUnitModal = createModal({}, gFormat); // modal group 6 // G70-71
 var gCycleModal = createModal({}, gFormat); // modal group 9 // G81, ...
 var gRetractModal = createModal({}, gFormat); // modal group 10 // G98-99
-var gRotationModal = createModal({}, gFormat); // modal group 16 // G68-G69
+var gRotationModal = createModal({
+  onchange: function () {
+    if (probeVariables.probeAngleMethod == "G68") {
+      probeVariables.outputRotationCodes = true;
+    }
+  }
+}, gFormat); // modal group 16 // G68-G69
 var mClampModal = createModalGroup(
   {strict:false},
   [
@@ -298,6 +304,14 @@ var cancelTiltFirst = true; // cancel G68.2 with G69 prior to G54-G59 WCS block
 var useABCPrepositioning = true; // position ABC axes prior to G68.2 block
 
 var WARNING_WORK_OFFSET = 0;
+
+var allowIndexingWCSProbing = false; // specifies that probe WCS with tool orientation is supported
+var probeVariables = {
+  outputRotationCodes: false, // defines if it is required to output rotation codes
+  probeAngleMethod   : "OFF", // OFF, AXIS_ROT, G68, G54.4
+  compensationXY     : undefined,
+  rotationalAxis     : -1
+};
 
 var SUB_UNKNOWN = 0;
 var SUB_PATTERN = 1;
@@ -1589,16 +1603,17 @@ function approach(value) {
 }
 
 function setProbeAngleMethod() {
-  probeVariables.probeAngleMethod = (machineConfiguration.getNumberOfAxes() < 5 || is3D()) ? (getProperty("useG54x4") ? "G54.4" : "G68") : "UNSUPPORTED";
-  var axes = [machineConfiguration.getAxisU(), machineConfiguration.getAxisV(), machineConfiguration.getAxisW()];
-  for (var i = 0; i < axes.length; ++i) {
-    if (axes[i].isEnabled() && isSameDirection((axes[i].getAxis()).getAbsolute(), new Vector(0, 0, 1)) && axes[i].isTable()) {
-      probeVariables.probeAngleMethod = "AXIS_ROT";
-      probeVariables.rotationalAxis = axes[i].getCoordinate();
-      break;
-    }
-  }
-  probeVariables.outputRotationCodes = true;
+  return;
+  // probeVariables.probeAngleMethod = (machineConfiguration.getNumberOfAxes() < 5 || is3D()) ? (getProperty("useG54x4") ? "G54.4" : "G68") : "UNSUPPORTED";
+  // var axes = [machineConfiguration.getAxisU(), machineConfiguration.getAxisV(), machineConfiguration.getAxisW()];
+  // for (var i = 0; i < axes.length; ++i) {
+  //   if (axes[i].isEnabled() && isSameDirection((axes[i].getAxis()).getAbsolute(), new Vector(0, 0, 1)) && axes[i].isTable()) {
+  //     probeVariables.probeAngleMethod = "AXIS_ROT";
+  //     probeVariables.rotationalAxis = axes[i].getCoordinate();
+  //     break;
+  //   }
+  // }
+  // probeVariables.outputRotationCodes = true;
 }
 
 function protectedProbeMove(_cycle, x, y, z) {
@@ -2663,7 +2678,7 @@ function onSectionEnd() {
     //   setProbeAngle(); // output probe angle rotations if required
     // }
 
-    writeBlock(mFormat.format(81)); //M80 turns on probe
+    writeBlock(mFormat.format(81)); //M81 turns off probe
   }
 
   operationNeedsSafeStart = false; // reset for next section
