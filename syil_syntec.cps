@@ -980,6 +980,14 @@ function getWorkPlaneMachineABC(workPlane, _setWorkPlane, rotate) {
   return abc;
 }
 
+var probeOutputWorkOffset = 1;
+
+function onParameter(name, value) {
+  if (name == "probe-output-work-offset") {
+    probeOutputWorkOffset = (value > 0) ? value : 1;
+  }
+}
+
 /** Returns true if the spatial vectors are significantly different. */
 function areSpatialVectorsDifferent(_vector1, _vector2) {
   return (xyzFormat.getResultingValue(_vector1.x) != xyzFormat.getResultingValue(_vector2.x)) ||
@@ -1524,11 +1532,8 @@ function onSection() {
   validate(lengthCompensationActive, "Length compensation is not active.");
 
   if (isProbeOperation()) {
-    // validate(probeVariables.probeAngleMethod != "G68", "You cannot probe while G68 Rotation is in effect.");
-    // validate(probeVariables.probeAngleMethod != "G54.4", "You cannot probe while workpiece setting error compensation G54.4 is enabled.");
-    // writeBlock(gFormat.format(65), "P" + 9832); // spin the probe on
-    writeBlock(mFormat.format(80)); //M80 turns on probe
-    // inspectionCreateResultsFileHeader();
+    // writeBlock(gFormat.format(65), "P" + 9832); // Turn on probe
+    writeBlock(mFormat.format(80)); // M80 turns on probe
   }
 
   // define subprogram
@@ -1631,8 +1636,6 @@ function protectedProbeMove(_cycle, x, y, z) {
   }
 }
 
-var probeOutputWorkOffset = 1;
-
 function getProbingArguments(cycle, updateWCS) {
   var outputWCSCode = updateWCS && currentSection.strategy == "probe";
   if (outputWCSCode) {
@@ -1645,6 +1648,7 @@ function getProbingArguments(cycle, updateWCS) {
       currentWorkOffset = undefined;
     }
   }
+  log("probeOutputWorkOffset:" + probeOutputWorkOffset);
   return [
     (cycle.angleAskewAction == "stop-message" ? "B" + xyzFormat.format(cycle.toleranceAngle ? cycle.toleranceAngle : 0) : undefined),
     ((cycle.updateToolWear && cycle.toolWearErrorCorrection < 100) ? "F" + xyzFormat.format(cycle.toolWearErrorCorrection ? cycle.toolWearErrorCorrection / 100 : 100) : undefined),
@@ -1697,7 +1701,9 @@ function onCyclePoint(x, y, z) {
   }
 
   if (isFirstCyclePoint()) {
-    repositionToCycleClearance(cycle, x, y, z);
+    if (!isProbeOperation()) {
+      repositionToCycleClearance(cycle, x, y, z);
+    }
 
     var F = cycle.feedrate;
     if (getProperty("useG95")) {
@@ -1731,6 +1737,9 @@ function onCyclePoint(x, y, z) {
       }
       break;
     case "chip-breaking":
+      log("accumulatedDepth:" + cycle.accumulatedDepth);
+      log("depth:" + cycle.depth);
+      log("P:" + P);
       if ((cycle.accumulatedDepth < cycle.depth) || (P > 0)) {
         expandCyclePoint(x, y, z);
       } else {
