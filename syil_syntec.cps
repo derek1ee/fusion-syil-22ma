@@ -1648,7 +1648,6 @@ function getProbingArguments(cycle, updateWCS) {
       currentWorkOffset = undefined;
     }
   }
-  log("probeOutputWorkOffset:" + probeOutputWorkOffset);
   return [
     (cycle.angleAskewAction == "stop-message" ? "B" + xyzFormat.format(cycle.toleranceAngle ? cycle.toleranceAngle : 0) : undefined),
     ((cycle.updateToolWear && cycle.toolWearErrorCorrection < 100) ? "F" + xyzFormat.format(cycle.toolWearErrorCorrection ? cycle.toolWearErrorCorrection / 100 : 100) : undefined),
@@ -1737,9 +1736,6 @@ function onCyclePoint(x, y, z) {
       }
       break;
     case "chip-breaking":
-      log("accumulatedDepth:" + cycle.accumulatedDepth);
-      log("depth:" + cycle.depth);
-      log("P:" + P);
       if ((cycle.accumulatedDepth < cycle.depth) || (P > 0)) {
         expandCyclePoint(x, y, z);
       } else {
@@ -2682,12 +2678,13 @@ function onSectionEnd() {
   forceAny();
 
   if (isProbeOperation()) {
-    // writeBlock(gFormat.format(65), "P" + 9833); // spin the probe off
-    // if (probeVariables.probeAngleMethod != "G68") {
-    //   setProbeAngle(); // output probe angle rotations if required
-    // }
+    // writeBlock(gFormat.format(65), "P" + 9833); // Turn off probe
 
-    writeBlock(mFormat.format(81)); //M81 turns off probe
+    if(getNextSection().getTool().number != currentSection.getTool().number) {
+      // Do not turn off probe if there are additional probing operation,
+      // Turning probe on/off quickly seems to hang the controller on next M80.
+      writeBlock(mFormat.format(81)); // M81 turns off probe
+    }
   }
 
   operationNeedsSafeStart = false; // reset for next section
