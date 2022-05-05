@@ -2488,9 +2488,16 @@ function onClose() {
 
   zOutput.reset();
 
-  forceWorkPlane();
-  setWorkPlane(new Vector(0, 0, 0)); // reset working plane
-  writeRetract(X, Y); // return to home
+  // forceWorkPlane();
+  // setWorkPlane(new Vector(0, 0, 0)); // reset working plane
+  // writeRetract(X, Y); // return to home
+
+  // Position the table in the front-center instead of X/Y home position.
+  writeBlock(gAbsIncModal.format(90),
+             gFormat.format(53),
+             gMotionModal.format(0),
+             xOutput.format(7.5),
+             yOutput.format(0));
 
   onImpliedCommand(COMMAND_END);
   onImpliedCommand(COMMAND_STOP_SPINDLE);
