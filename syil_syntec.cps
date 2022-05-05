@@ -4,8 +4,8 @@
 
   Syntec post processor configuration.
 
-  $Revision: 43691 a4783d56a54c6413f4de709462c4f7f3db5d391d $
-  $Date: 2022-03-08 23:59:37 $
+  $Revision: 43777 913b50004e554ec1ad3ee0391622b231c1a0fb59 $
+  $Date: 2022-04-26 12:40:16 $
 
   FORKID {78441FCF-1C1F-4D81-BFA8-AAF6F30E1F3B}
 */
@@ -40,7 +40,7 @@ properties = {
   writeMachine: {
     title      : "Write machine",
     description: "Output the machine settings in the header of the code.",
-    group      : 0,
+    group      : "formats",
     type       : "boolean",
     value      : true,
     scope      : "post"
@@ -48,7 +48,7 @@ properties = {
   writeTools: {
     title      : "Write tool list",
     description: "Output a tool list in the header of the code.",
-    group      : 0,
+    group      : "formats",
     type       : "boolean",
     value      : true,
     scope      : "post"
@@ -56,7 +56,7 @@ properties = {
   preloadTool: {
     title      : "Preload tool",
     description: "Preloads the next tool at a tool change (if any).",
-    group      : 1,
+    group      : "preferences",
     type       : "boolean",
     value      : true,
     scope      : "post"
@@ -64,7 +64,7 @@ properties = {
   showSequenceNumbers: {
     title      : "Use sequence numbers",
     description: "Use sequence numbers for each block of outputted code.",
-    group      : 1,
+    group      : "formats",
     type       : "boolean",
     value      : true,
     scope      : "post"
@@ -72,7 +72,7 @@ properties = {
   sequenceNumberStart: {
     title      : "Start sequence number",
     description: "The number at which to start the sequence numbers.",
-    group      : 1,
+    group      : "formats",
     type       : "integer",
     value      : 10,
     scope      : "post"
@@ -80,7 +80,7 @@ properties = {
   sequenceNumberIncrement: {
     title      : "Sequence number increment",
     description: "The amount by which the sequence number is incremented by in each block.",
-    group      : 1,
+    group      : "formats",
     type       : "integer",
     value      : 5,
     scope      : "post"
@@ -88,6 +88,7 @@ properties = {
   optionalStop: {
     title      : "Optional stop",
     description: "Outputs optional stop code during when necessary in the code.",
+    group      : "preferences",
     type       : "boolean",
     value      : true,
     scope      : "post"
@@ -95,6 +96,7 @@ properties = {
   separateWordsWithSpace: {
     title      : "Separate words with space",
     description: "Adds spaces between words if 'yes' is selected.",
+    group      : "formats",
     type       : "boolean",
     value      : true,
     scope      : "post"
@@ -102,6 +104,7 @@ properties = {
   allow3DArcs: {
     title      : "Allow 3D arcs",
     description: "Specifies whether 3D circular arcs are allowed.",
+    group      : "preferences",
     type       : "boolean",
     value      : false,
     scope      : "post"
@@ -109,6 +112,7 @@ properties = {
   useRadius: {
     title      : "Radius arcs",
     description: "If yes is selected, arcs are outputted using radius values rather than IJK.",
+    group      : "preferences",
     type       : "boolean",
     value      : false,
     scope      : "post"
@@ -116,6 +120,7 @@ properties = {
   showNotes: {
     title      : "Show notes",
     description: "Writes operation notes as comments in the outputted code.",
+    group      : "formats",
     type       : "boolean",
     value      : false,
     scope      : "post"
@@ -123,8 +128,8 @@ properties = {
   useSmoothing: {
     title      : "SGI / High Precision Mode",
     description: "High-Speed High-Precision Parameter.",
+    group      : "preferences",
     type       : "enum",
-    group      : 1,
     values     : [
       {title:"Off", id:"-1"},
       {title:"Automatic", id:"9999"},
@@ -138,8 +143,8 @@ properties = {
   precisionLevel: {
     title      : "Machining Condition",
     description: "Users can choose the High-Speed High-Precision Parameter based on the controller HSHP configuration",
+    group      : "preferences",
     type       : "enum",
-    group      : 1,
     values     : [
       {title:"P1 More Corner", id:"P1"},
       {title:"P2 More Arcs", id:"P2"},
@@ -151,6 +156,7 @@ properties = {
   usePitchForTapping: {
     title      : "Use pitch for tapping",
     description: "Enables the use of pitch instead of feed for the F-word in canned tapping cycles. Your CNC control must be setup for pitch mode!",
+    group      : "preferences",
     type       : "boolean",
     value      : false,
     scope      : "post"
@@ -158,6 +164,7 @@ properties = {
   useG95: {
     title      : "Use G95",
     description: "Use IPR/MPR instead of IPM/MPM.",
+    group      : "preferences",
     type       : "boolean",
     value      : false,
     scope      : "post"
@@ -165,6 +172,7 @@ properties = {
   useSubroutines: {
     title      : "Use subroutines",
     description: "Select your desired subroutine option. 'All Operations' creates subroutines per each operation, 'Cycles' creates subroutines for cycle operations on same holes, and 'Patterns' creates subroutines for patterned operations.",
+    group      : "preferences",
     type       : "enum",
     values     : [
       {title:"No", id:"none"},
@@ -178,6 +186,7 @@ properties = {
   safeStartAllOperations: {
     title      : "Safe start all operations",
     description: "Write optional blocks at the beginning of all operations that include all commands to start program.",
+    group      : "preferences",
     type       : "boolean",
     value      : false,
     scope      : "post"
@@ -185,6 +194,7 @@ properties = {
   useClampCodes: {
     title      : "Use clamp codes",
     description: "Specifies whether clamp codes for rotary axes should be output. For simultaneous toolpaths rotary axes will always get unclamped.",
+    group      : "multiAxis",
     type       : "boolean",
     value      : true,
     scope      : "post"
@@ -192,6 +202,7 @@ properties = {
   safePositionMethod: {
     title      : "Safe Retracts",
     description: "Select your desired retract option. 'Clearance Height' retracts to the operation clearance height.",
+    group      : "homePositions",
     type       : "enum",
     values     : [
       {title:"G28", id:"G28"},
