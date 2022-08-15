@@ -2800,6 +2800,7 @@ function onClose() {
   optionalSection = false;
 
   onCommand(COMMAND_COOLANT_OFF);
+  onCommand(COMMAND_STOP_SPINDLE);
 
   disableLengthCompensation(true);
   cancelWorkPlane();
@@ -2809,9 +2810,12 @@ function onClose() {
 
   zOutput.reset();
 
-  forceWorkPlane();
-  setWorkPlane(new Vector(0, 0, 0)); // reset working plane
-  writeRetract(X, Y); // return to home
+  // G53 G0 G90 X-7.5 Y0.
+  writeBlock(gFormat.format(53), gAbsIncModal.format(90), gMotionModal.format(0), xOutput.format(-7.5), yOutput.format(0));
+
+  // forceWorkPlane();
+  // setWorkPlane(new Vector(0, 0, 0)); // reset working plane
+  // writeRetract(X, Y); // return to home
 
   onImpliedCommand(COMMAND_END);
   onImpliedCommand(COMMAND_STOP_SPINDLE);
