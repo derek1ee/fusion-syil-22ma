@@ -210,6 +210,22 @@ properties = {
     ],
     value: "G28",
     scope: "post"
+  },
+  endOfProgramTableX: {
+    title      : "Table X position at end of program",
+    description: "Determines the X axis table position at the end of the program",
+    group      : "preferences",
+    type       : "number",
+    value      : -7.5,
+    scope      : "post"
+  },
+  endOfProgramTableY: {
+    title      : "Table Y position at end of program",
+    description: "Determines the Y axis table position at the end of the program",
+    group      : "preferences",
+    type       : "number",
+    value      : 0.0,
+    scope      : "post"
   }
 };
 
@@ -2811,7 +2827,11 @@ function onClose() {
   zOutput.reset();
 
   // G53 G0 G90 X-7.5 Y0.
-  writeBlock(gFormat.format(53), gAbsIncModal.format(90), gMotionModal.format(0), xOutput.format(-7.5), yOutput.format(0));
+  writeBlock(gFormat.format(53),
+             gAbsIncModal.format(90),
+             gMotionModal.format(0),
+             xOutput.format(getProperty("endOfProgramTableX")),
+             yOutput.format(getProperty("endOfProgramTableY")));
 
   // forceWorkPlane();
   // setWorkPlane(new Vector(0, 0, 0)); // reset working plane
