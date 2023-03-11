@@ -2,22 +2,22 @@
   Copyright (C) 2012-2022 by Autodesk, Inc.
   All rights reserved.
 
-  SYNTEC post processor configuration.
+  Syntec post processor configuration.
 
   $Revision: 44013 15bbcf7973d643e20fc10210417bd85668e7c0ea $
   $Date: 2022-10-27 20:22:54 $
 
-  FORKID {18F70A54-37DF-4F79-9BF0-3BBDC2B4FF72}
+  FORKID {78441FCF-1C1F-4D81-BFA8-AAF6F30E1F3B}
 */
 
-description = "SYNTEC";
-vendor = "SYNTEC";
-vendorUrl = "https://syntecamerica.com/";
+description = "SYIL";
+vendor = "Syil";
+vendorUrl = "http://www.syil.com";
 legal = "Copyright (C) 2012-2022 by Autodesk, Inc.";
 certificationLevel = 2;
-minimumRevision = 45821;
+minimumRevision = 45702;
 
-longDescription = "Generic SYNTEC Milling post. NOTE: HSHP parameters must be defined in the control before using the High Precision mode. The 'Machining Condition' property can be used to choose from the P1,P2,P3 High Precision modes.";
+longDescription = "Syntec Milling post for Syil machines. NOTE: HSHP parameters must be defined in the control before using the High Precision mode. The 'Machining Condition' property can be used to choose from the P1,P2,P3 High Precision modes.";
 
 extension = "nc";
 programNameIsInteger = true;
@@ -201,7 +201,7 @@ properties = {
     description: "Specifies whether clamp codes for rotary axes should be output. For simultaneous toolpaths rotary axes will always get unclamped.",
     group      : "multiAxis",
     type       : "boolean",
-    value      : false,
+    value      : true,
     scope      : "post"
   },
   safePositionMethod: {
@@ -309,7 +309,7 @@ var forceMultiAxisIndexing = false; // force multi-axis indexing for 3D programs
 var maximumLineLength = 80; // the maximum number of charaters allowed in a line
 var minimumCyclePoints = 5; // minimum number of points in cycle operation to consider for subprogram
 var cancelTiltFirst = true; // cancel G68.2 with G69 prior to G54-G59 WCS block
-var useABCPrepositioning = false; // position ABC axes prior to G68.2 block
+var useABCPrepositioning = true; // position ABC axes prior to G68.2 block
 
 var WARNING_WORK_OFFSET = 0;
 
@@ -427,8 +427,8 @@ function onOpen() {
   gRotationModal.format(69); // Default to G69 Rotation Off
 
   if (false) { // note: setup your machine here
-    var aAxis = createAxis({coordinate:0, table:true, axis:[1, 0, 0], range:[-360, 360], preference:1});
-    var cAxis = createAxis({coordinate:2, table:true, axis:[0, 0, 1], range:[-360, 360], preference:1});
+    var aAxis = createAxis({coordinate:0, table:false, axis:[1, 0, 0], range:[-360, 360], preference:1});
+    var cAxis = createAxis({coordinate:2, table:false, axis:[0, 0, 1], range:[-360, 360], preference:1});
     machineConfiguration = new MachineConfiguration(aAxis, cAxis);
 
     setMachineConfiguration(machineConfiguration);
@@ -808,6 +808,7 @@ function positionABC(abc, force) {
     onCommand(COMMAND_UNLOCK_MULTI_AXIS);
     gMotionModal.reset();
     writeBlock(gMotionModal.format(0), a, b, c);
+    currentMachineABC = new Vector(abc);
     setCurrentABC(abc); // required for machine simulation
   }
 }
@@ -930,15 +931,49 @@ function setWorkPlane(abc) {
   currentWorkPlaneABC = abc;
 }
 
+var closestABC = false; // choose closest machine angles
+var currentMachineABC;
+
 function getWorkPlaneMachineABC(workPlane, _setWorkPlane, rotate) {
   var W = workPlane; // map to global frame
 
-  var currentABC = isFirstSection() ? new Vector(0, 0, 0) : getCurrentDirection();
-  var abc = machineConfiguration.getABCByPreference(W, currentABC, ABC, PREFER_PREFERENCE, ENABLE_ALL);
+  var abc = machineConfiguration.getABC(W);
+  if (closestABC) {
+    if (currentMachineABC) {
+      abc = machineConfiguration.remapToABC(abc, currentMachineABC);
+    } else {
+      abc = machineConfiguration.getPreferredABC(abc);
+    }
+  } else {
+    abc = machineConfiguration.getPreferredABC(abc);
+  }
+
+  try {
+    abc = machineConfiguration.remapABC(abc);
+    if (_setWorkPlane) {
+      currentMachineABC = abc;
+    }
+  } catch (e) {
+    error(
+      localize("Machine angles not supported") + ":"
+      + conditional(machineConfiguration.isMachineCoordinate(0), " A" + abcFormat.format(abc.x))
+      + conditional(machineConfiguration.isMachineCoordinate(1), " B" + abcFormat.format(abc.y))
+      + conditional(machineConfiguration.isMachineCoordinate(2), " C" + abcFormat.format(abc.z))
+    );
+  }
 
   var direction = machineConfiguration.getDirection(abc);
   if (!isSameDirection(direction, W.forward)) {
     error(localize("Orientation not supported."));
+  }
+
+  if (!machineConfiguration.isABCSupported(abc)) {
+    error(
+      localize("Work plane is not supported") + ":"
+      + conditional(machineConfiguration.isMachineCoordinate(0), " A" + abcFormat.format(abc.x))
+      + conditional(machineConfiguration.isMachineCoordinate(1), " B" + abcFormat.format(abc.y))
+      + conditional(machineConfiguration.isMachineCoordinate(2), " C" + abcFormat.format(abc.z))
+    );
   }
 
   if (rotate) {
@@ -951,6 +986,7 @@ function getWorkPlaneMachineABC(workPlane, _setWorkPlane, rotate) {
       setRotation(R);
     }
   }
+
   return abc;
 }
 
@@ -1411,31 +1447,61 @@ function onSection() {
     skipBlock = _skipBlock;
     disableLengthCompensation(false);
 
-    if (!machineConfiguration.isHeadConfiguration()) {
+    if (currentSection.isMultiAxis() && useMultiAxisFeatures) {
+      var W;
+      if (false) {
+      //if (machineConfiguration.isMultiAxisConfiguration()) {
+        W = machineConfiguration.getOrientation(abc);
+      } else {
+        W = Matrix.getOrientationFromDirection(currentSection.getGlobalInitialToolAxis());
+      }
+      var euler = W.getEuler2(EULER_ZXZ_R);
+      abc = new Vector(euler.x, euler.y, euler.z);
+
+      var prePosition = W.getTransposed().multiply(initialPosition);
       skipBlock = _skipBlock;
       writeBlock(
-        gAbsIncModal.format(90),
-        gMotionModal.format(0), xOutput.format(initialPosition.x), yOutput.format(initialPosition.y)
+        gAbsIncModal.format(90), gMotionModal.format(0),
+        xOutput.format(prePosition.x), yOutput.format(prePosition.y)
       );
+      cancelWorkPlane();
       skipBlock = _skipBlock;
       writeBlock(
         gMotionModal.format(0),
         gFormat.format(getOffsetCode()),
+        xOutput.format(initialPosition.x),
+        yOutput.format(initialPosition.y),
         zOutput.format(initialPosition.z),
         hFormat.format(lengthOffset)
       );
       lengthCompensationActive = true;
     } else {
-      skipBlock = _skipBlock;
-      writeBlock(
-        gAbsIncModal.format(90),
-        gMotionModal.format(0),
-        gFormat.format(getOffsetCode()),
-        xOutput.format(initialPosition.x),
-        yOutput.format(initialPosition.y),
-        zOutput.format(initialPosition.z), hFormat.format(lengthOffset)
-      );
-      lengthCompensationActive = true;
+      if (!machineConfiguration.isHeadConfiguration()) {
+        skipBlock = _skipBlock;
+        writeBlock(
+          gAbsIncModal.format(90),
+          gMotionModal.format(0), xOutput.format(initialPosition.x), yOutput.format(initialPosition.y)
+        );
+        skipBlock = _skipBlock;
+        writeBlock(
+          gMotionModal.format(0),
+          gFormat.format(getOffsetCode()),
+          zOutput.format(initialPosition.z),
+          hFormat.format(lengthOffset)
+        );
+        lengthCompensationActive = true;
+      } else {
+        skipBlock = _skipBlock;
+        writeBlock(
+          gAbsIncModal.format(90),
+          gMotionModal.format(0),
+          gFormat.format(getOffsetCode()),
+          xOutput.format(initialPosition.x),
+          yOutput.format(initialPosition.y),
+          zOutput.format(initialPosition.z), hFormat.format(lengthOffset)
+        );
+        lengthCompensationActive = true;
+      }
     }
     zIsOutput = true;
     gMotionModal.reset();
@@ -1473,6 +1539,20 @@ function onSection() {
 
   retracted = false;
 }
+
+Matrix.getOrientationFromDirection = function (ijk) {
+  var forward = ijk;
+  var unitZ = new Vector(0, 0, 1);
+  var W;
+  if (Math.abs(Vector.dot(forward, unitZ)) < 0.5) {
+    var imX = Vector.cross(forward, unitZ).getNormalized();
+    W = new Matrix(imX, Vector.cross(forward, imX), forward);
+  } else {
+    var imX = Vector.cross(new Vector(0, 1, 0), forward).getNormalized();
+    W = new Matrix(imX, Vector.cross(forward, imX), forward);
+  }
+  return W;
+};
 
 function onDwell(seconds) {
   if (seconds > 99999.999) {
@@ -2221,6 +2301,11 @@ function onSectionEnd() {
         subprogramEnd();
       }
     }
+  }
+
+  // the code below gets the machine angles from previous operation.  closestABC must also be set to true
+  if (currentSection.isMultiAxis() && currentSection.isOptimizedForMachine()) {
+    currentMachineABC = currentSection.getFinalToolAxisABC();
   }
 
   forceAny();
