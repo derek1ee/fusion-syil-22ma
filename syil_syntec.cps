@@ -8,18 +8,16 @@
 
   $Revision: 44014 $
   $Date: 2023-03-11 14:11:00 $
-
-  FORKID {78441FCF-1C1F-4D81-BFA8-AAF6F30E1F3B}
 */
 
-description = "SYIL";
+description = "Unofficial Post for Syil w/ Syntec Controller";
 vendor = "Syil";
 vendorUrl = "http://www.syil.com";
 legal = "Copyright (C) 2012-2022 by Autodesk, Inc.";
 certificationLevel = 2;
 minimumRevision = 45702;
 
-longDescription = "Syntec Milling post for Syil machines. NOTE: HSHP parameters must be defined in the control before using the High Precision mode. The 'Machining Condition' property can be used to choose from the P1,P2,P3 High Precision modes.";
+longDescription = "Syntec Milling post for Syil machines. This is an unofficial post modified by Derek Li and published at https://github.com/derek1ee/fusion-syil-22ma, use at your own risk. NOTE: HSHP parameters must be defined in the control before using the High Precision mode. The 'Machining Condition' property can be used to choose from the P1,P2,P3 High Precision modes.";
 
 extension = "nc";
 programNameIsInteger = true;
