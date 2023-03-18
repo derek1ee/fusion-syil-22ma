@@ -1030,6 +1030,14 @@ function onParameter(name, value) {
   }
 }
 
+function onPassThrough(text) {
+  var commands = String(text).split(",");
+
+  for (text in commands) {
+    writeBlock(commands[text]);
+  }
+}
+
 /** Returns true if the spatial vectors are significantly different. */
 function areSpatialVectorsDifferent(_vector1, _vector2) {
   return (xyzFormat.getResultingValue(_vector1.x) != xyzFormat.getResultingValue(_vector2.x)) ||
