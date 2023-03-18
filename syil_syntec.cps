@@ -3,21 +3,21 @@
   All rights reserved.
 
   Syntec post processor configuration.
+  Modified by Derek Li.
+  https://github.com/derek1ee/fusion-syil-22ma
 
-  $Revision: 43777 913b50004e554ec1ad3ee0391622b231c1a0fb59 $
-  $Date: 2022-04-26 12:40:16 $
-
-  FORKID {78441FCF-1C1F-4D81-BFA8-AAF6F30E1F3B}
+  $Revision: 44014 $
+  $Date: 2023-03-11 14:11:00 $
 */
 
-description = "SYIL";
+description = "Unofficial Post for Syil w/ Syntec Controller";
 vendor = "Syil";
 vendorUrl = "http://www.syil.com";
 legal = "Copyright (C) 2012-2022 by Autodesk, Inc.";
 certificationLevel = 2;
 minimumRevision = 45702;
 
-longDescription = "Syntec Milling post for Syil machines. NOTE: HSHP parameters must be defined in the control before using the High Precision mode. The 'Machining Condition' property can be used to choose from the P1,P2,P3 High Precision modes.";
+longDescription = "Syntec Milling post for Syil machines. This is an unofficial post modified by Derek Li and published at https://github.com/derek1ee/fusion-syil-22ma, use at your own risk. NOTE: HSHP parameters must be defined in the control before using the High Precision mode. The 'Machining Condition' property can be used to choose from the P1,P2,P3 High Precision modes.";
 
 extension = "nc";
 programNameIsInteger = true;
@@ -63,11 +63,16 @@ properties = {
   },
   showSequenceNumbers: {
     title      : "Use sequence numbers",
-    description: "Use sequence numbers for each block of outputted code.",
+    description: "'Yes' outputs sequence numbers on each block, 'Only on tool change' outputs sequence numbers on tool change blocks only, and 'No' disables the output of sequence numbers.",
     group      : "formats",
-    type       : "boolean",
-    value      : true,
-    scope      : "post"
+    type       : "enum",
+    values     : [
+      {title:"Yes", id:"true"},
+      {title:"No", id:"false"},
+      {title:"Only on tool change", id:"toolChange"}
+    ],
+    value: "true",
+    scope: "post"
   },
   sequenceNumberStart: {
     title      : "Start sequence number",
@@ -379,7 +384,7 @@ function writeBlock() {
     return;
   }
   if (!getProperty("useSubroutinePatterns")) {
-    if (getProperty("showSequenceNumbers")) {
+    if (getProperty("showSequenceNumbers") == "true") {
       if (optionalSection || skipBlock) {
         if (text) {
           writeWords("/", "N" + sequenceNumber, text);
@@ -415,7 +420,7 @@ function writeBlock() {
 */
 function writeOptionalBlock() {
   skipBlock = true;
-  if (getProperty("showSequenceNumbers")) {
+  if (getProperty("showSequenceNumbers") == "true") {
     var words = formatWords(arguments);
     if (words) {
       writeWords("/", "N" + sequenceNumber, words);
@@ -428,6 +433,16 @@ function writeOptionalBlock() {
 
 function formatComment(text) {
   return "(" + filterText(String(text).toUpperCase(), permittedCommentChars).replace(/[()]/g, "") + ")";
+}
+
+/**
+  Writes the specified block - used for tool changes only.
+*/
+function writeToolBlock() {
+  var show = getProperty("showSequenceNumbers");
+  setProperty("showSequenceNumbers", (show == "true" || show == "toolChange") ? "true" : "false");
+  writeBlock(arguments);
+  setProperty("showSequenceNumbers", show);
 }
 
 /**
@@ -737,10 +752,10 @@ function initializeSmoothing() {
     smoothing.isDifferent = smoothing.level != previousLevel;
     break;
   case "tolerance":
-    smoothing.isDifferent = smoothing.tolerance != previousTolerance;
+    smoothing.isDifferent = xyzFormat.areDifferent(smoothing.tolerance, previousTolerance);
     break;
   case "both":
-    smoothing.isDifferent = smoothing.level != previousLevel || smoothing.tolerance != previousTolerance;
+    smoothing.isDifferent = smoothing.level != previousLevel || xyzFormat.areDifferent(smoothing.tolerance, previousTolerance);
     break;
   default:
     error(localize("Unsupported smoothing criteria."));
@@ -1144,7 +1159,7 @@ function subprogramStart(_initialPosition, _abc, _incremental) {
     "N" + oFormat.format(currentSubprogram) +
     conditional(comment, formatComment(comment.substr(0, maximumLineLength - 2 - 6 - 1)))
   );
-  setProperty("showSequenceNumbers", false);
+  setProperty("showSequenceNumbers", "false");
   if (_incremental) {
     setIncrementalMode(_initialPosition, _abc);
   }
@@ -1368,7 +1383,7 @@ function onSection() {
       disableLengthCompensation(false);
     }
     skipBlock = !insertToolCall;
-    writeBlock("T" + toolFormat.format(tool.number), mFormat.format(6));
+    writeToolBlock("T" + toolFormat.format(tool.number), mFormat.format(6));
     if (tool.comment) {
       writeComment(tool.comment);
     }
@@ -1460,12 +1475,6 @@ function onSection() {
   gMotionModal.reset();
 
   var initialPosition = getFramePosition(currentSection.getInitialPosition());
-  if (!retracted && !insertToolCall) {
-    if (getCurrentPosition().z < initialPosition.z) {
-      writeBlock(gMotionModal.format(0), zOutput.format(initialPosition.z));
-      zIsOutput = true;
-    }
-  }
 
   if (insertToolCall || !lengthCompensationActive || operationNeedsSafeStart || retracted || (!isFirstSection() && getPreviousSection().isMultiAxis())) {
     var _skipBlock = !(insertToolCall || retracted);
@@ -1541,6 +1550,11 @@ function onSection() {
     zIsOutput = true;
     gMotionModal.reset();
     if (_skipBlock) {
+      if (getCurrentPosition().z < initialPosition.z) {
+        zOutput.reset();
+        writeBlock(gMotionModal.format(0), zOutput.format(initialPosition.z));
+        zIsOutput = true;
+      }
       forceXYZ();
       var x = xOutput.format(initialPosition.x);
       var y = yOutput.format(initialPosition.y);
@@ -1548,6 +1562,10 @@ function onSection() {
     }
 
   } else {
+    if ((getCurrentPosition().z < initialPosition.z) && !retracted) {
+      writeBlock(gMotionModal.format(0), zOutput.format(initialPosition.z));
+      zIsOutput = true;
+    }
     writeBlock(
       gAbsIncModal.format(90),
       gMotionModal.format(0),
@@ -1556,7 +1574,7 @@ function onSection() {
     );
   }
 
-  validate(lengthCompensationActive, "Length compensation is not active.");
+  validate(lengthCompensationActive, "Tool length compensation is not active.");
 
   if (isProbeOperation()) {
     // writeBlock(gFormat.format(65), "P" + 9832); // Turn on probe
@@ -1898,6 +1916,10 @@ function onCyclePoint(x, y, z) {
       );
       break;
     case "reaming":
+      if (feedFormat.getResultingValue(cycle.feedrate) != feedFormat.getResultingValue(cycle.retractFeedrate)) {
+        expandCyclePoint(x, y, z);
+        break;
+      }
       if (P > 0) {
         writeBlock(
           gRetractModal.format(98), gCycleModal.format(89),
@@ -1933,6 +1955,10 @@ function onCyclePoint(x, y, z) {
       );
       break;
     case "boring":
+      if (feedFormat.getResultingValue(cycle.feedrate) != feedFormat.getResultingValue(cycle.retractFeedrate)) {
+        expandCyclePoint(x, y, z);
+        break;
+      }
       if (P > 0) {
         writeBlock(
           gRetractModal.format(98), gCycleModal.format(89),
@@ -2798,10 +2824,10 @@ function writeRetract() {
 }
 
 function getOffsetCode() {
-  // assumes a head configuration uses TCP on a Fanuc controller
+  // assumes a head configuration uses TCP on a SYNTEC controller
   var offsetCode = 43;
   if (currentSection.isMultiAxis()) {
-    if (machineConfiguration.isMultiAxisConfiguration()) {
+    if (machineConfiguration.isMultiAxisConfiguration() && (currentSection.getOptimizedTCPMode() == OPTIMIZE_NONE)) {
       offsetCode = 43.4;
     } else if (!machineConfiguration.isMultiAxisConfiguration()) {
       offsetCode = 43.5;
