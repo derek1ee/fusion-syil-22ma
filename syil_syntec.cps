@@ -6,8 +6,8 @@
   Modified by Derek Li.
   https://github.com/derek1ee/fusion-syil-22ma
 
-  $Revision: 44015 $
-  $Date: 2023-03-17 21:50:00 $
+  $Revision: 44016 $
+  $Date: 2023-04-04 22:20:00 $
 */
 
 description = "Unofficial Post for Syil w/ Syntec Controller";
@@ -2744,6 +2744,11 @@ function onSectionEnd() {
     if(hasNextSection() && (getNextSection().getTool().number != currentSection.getTool().number)) {
       // Do not turn off probe if there are additional probing operation,
       // Turning probe on/off quickly seems to hang the controller on next M80.
+      writeBlock(mFormat.format(81)); // M81 turns off probe
+    }
+
+    if(!hasNextSection()) {
+      // Turn off probe if it's the last operation
       writeBlock(mFormat.format(81)); // M81 turns off probe
     }
   }
