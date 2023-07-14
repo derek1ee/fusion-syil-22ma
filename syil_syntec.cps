@@ -231,6 +231,34 @@ properties = {
     type       : "number",
     value      : 0.0,
     scope      : "post"
+  },
+  breakControl: {
+    title      : "Break control",
+    description: "Detect broken tool",
+    group      : "preferences",
+    type       : "boolean",
+    value      : true,
+    scope      : "post"
+  },
+  thermalComp: {
+    title      : "Thermal comp",
+    description: "Measure and apply thermal comp",
+    group      : "preferences",
+    type       : "boolean",
+    value      : true,
+    scope      : "post"
+  },
+  toolSetterMarcoType: {
+    title      : "Tool setter marco",
+    description: "Choose whether to use Renishaw or Pinoeer tool setter marco",
+    group      : "preferences",
+    type       : "enum",
+    values     : [
+      {title:"Pioneer", id:"pioneer"},
+      {title:"Renishaw Primo LTS", id:"renishaw-primo"}
+    ],
+    value: "pioneer",
+    scope: "post"
   }
 };
 
@@ -252,7 +280,7 @@ var coolants = [
   {id:COOLANT_FLOOD, on:8},
   {id:COOLANT_MIST},
   {id:COOLANT_THROUGH_TOOL, on:88, off:89},
-  {id:COOLANT_AIR},
+  {id:COOLANT_AIR, on:7},
   {id:COOLANT_AIR_THROUGH_TOOL},
   {id:COOLANT_SUCTION},
   {id:COOLANT_FLOOD_MIST},
@@ -450,6 +478,58 @@ function writeToolBlock() {
 */
 function writeComment(text) {
   writeln(formatComment(text));
+}
+
+function toolBreakControl(tool) {
+  writeComment("TOOL BREAK CONTROL");
+
+  // G65P9921M23.C0.T[tool].
+  writeBlock(gFormat.format(65),
+  "P" + 9921,
+  "M" + ijkFormat.format(23),
+  "C" + ijkFormat.format(0),
+  "T" + ijkFormat.format(tool.number));
+}
+
+var measureNextTool = false;
+function measureTool(tool) {
+  writeComment("MEASURE TOOL LENGTH");
+
+  if(getProperty("toolSetterMarcoType") == "pioneer") {
+  // Pioneer cycle - diameter only
+  // G65P7002T1.S6.
+  // writeBlock(gFormat.format(65),
+  //            "P" + 7002,
+  //            "T" + ijkFormat.format(tool.number),
+  //            "S" + ijkFormat.format(tool.diameter));
+
+  // Pioneer cycle - diameter & radius
+  // G65P7002T1.D1.S6.
+  // writeBlock(gFormat.format(65),
+  //            "P" + 7002,
+  //            "T" + ijkFormat.format(tool.number),
+  //            "D" + ijkFormat.format(tool.number),
+  //            "S" + ijkFormat.format(tool.diameter));
+  } else if (getProperty("toolSetterMarcoType") == "renishaw-primo") {
+    // Renishaw cycle
+    // G65P9921M21.C0.T[tool].
+    writeBlock(gFormat.format(65),
+               "P" + 9921,
+               "M" + ijkFormat.format(21),
+               "C" + ijkFormat.format(0),
+               "T" + ijkFormat.format(tool.number));
+  }
+}
+
+function thermalCompTool(tool) {
+  writeComment("MEASURE AND APPLY THERMAL COMP");
+
+  // G65P9921M24.C0.T[tool].
+  writeBlock(gFormat.format(65),
+             "P" + 9921,
+             "M" + ijkFormat.format(24),
+             "C" + ijkFormat.format(0),
+             "T" + ijkFormat.format(tool.number));
 }
 
 function onOpen() {
@@ -1318,9 +1398,9 @@ function onSection() {
   if (insertToolCall || newWorkOffset || newWorkPlane || smoothing.cancel) {
 
     // stop spindle before retract during tool change
-    if (insertToolCall && !isFirstSection()) {
-      onCommand(COMMAND_STOP_SPINDLE);
-    }
+    // if (insertToolCall && !isFirstSection()) {
+    //   onCommand(COMMAND_STOP_SPINDLE);
+    // }
     disableLengthCompensation();
     if (cancelTiltFirst) {
       skipBlock = _skipBlock;
@@ -1410,6 +1490,13 @@ function onSection() {
         }
         writeComment(localize("ZMIN") + "=" + zRange.getMinimum());
       }
+    }
+
+    if (measureNextTool) {
+      measureTool(tool);
+      measureNextTool = false;
+    } else if (getProperty("thermalComp")) {
+      thermalCompTool(tool);
     }
 
     if (getProperty("preloadTool")) {
@@ -2680,8 +2767,10 @@ function onCommand(command) {
   case COMMAND_STOP_CHIP_TRANSPORT:
     return;
   case COMMAND_BREAK_CONTROL:
+    toolBreakControl(tool);
     return;
   case COMMAND_TOOL_MEASURE:
+    measureNextTool = true;
     return;
   case COMMAND_PROBE_ON:
     return;
@@ -2706,7 +2795,12 @@ function onSectionEnd() {
 
   if (((getCurrentSectionId() + 1) >= getNumberOfSections()) ||
       (tool.number != getNextSection().getTool().number)) {
-    onCommand(COMMAND_BREAK_CONTROL);
+        onCommand(COMMAND_COOLANT_OFF);
+        onCommand(COMMAND_STOP_SPINDLE);
+
+        if (tool.getBreakControl() || getProperty("breakControl")) {
+          onCommand(COMMAND_BREAK_CONTROL);
+        }
   }
   if (!isLastSection() && (getNextSection().getTool().coolant != tool.coolant)) {
     setCoolant(COOLANT_OFF);
@@ -2854,8 +2948,8 @@ function onClose() {
   writeln("");
   optionalSection = false;
 
-  onCommand(COMMAND_COOLANT_OFF);
-  onCommand(COMMAND_STOP_SPINDLE);
+  onImpliedCommand(COMMAND_COOLANT_OFF);
+  onImpliedCommand(COMMAND_STOP_SPINDLE);
 
   disableLengthCompensation(true);
   cancelWorkPlane();
