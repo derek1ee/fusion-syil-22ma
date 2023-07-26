@@ -2757,6 +2757,7 @@ function onCommand(command) {
   case COMMAND_PROBE_ON:
     // writeBlock(gFormat.format(65), "P" + 9832); // Turn on probe
     writeBlock(mFormat.format(80)); // M80 turns on probe
+    writeBlock(mFormat.format(19)); // Spindle lock
     return;
   case COMMAND_PROBE_OFF:
     // writeBlock(gFormat.format(65), "P" + 9833); // Turn off probe
@@ -2784,7 +2785,7 @@ function onSectionEnd() {
         onCommand(COMMAND_COOLANT_OFF);
         onCommand(COMMAND_STOP_SPINDLE);
 
-        if (tool.getBreakControl() || getProperty("breakControl")) {
+        if (tool.getBreakControl() || (!isProbeOperation() && getProperty("breakControl"))) {
           onCommand(COMMAND_BREAK_CONTROL);
         }
   }
