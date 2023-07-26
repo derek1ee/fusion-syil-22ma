@@ -231,6 +231,26 @@ properties = {
     type       : "number",
     value      : 0.0,
     scope      : "post"
+  },
+  breakControl: {
+    title      : "Break control",
+    description: "Detect broken tool",
+    group      : "preferences",
+    type       : "boolean",
+    value      : true,
+    scope      : "post"
+  },
+  toolSetterMarcoType: {
+    title      : "Tool setter marco",
+    description: "Choose whether to use Renishaw or Pinoeer tool setter marco",
+    group      : "preferences",
+    type       : "enum",
+    values     : [
+      {title:"Pioneer", id:"pioneer"},
+      {title:"Renishaw Primo LTS", id:"renishaw-primo"}
+    ],
+    value: "pioneer",
+    scope: "post"
   }
 };
 
@@ -252,7 +272,7 @@ var coolants = [
   {id:COOLANT_FLOOD, on:8},
   {id:COOLANT_MIST},
   {id:COOLANT_THROUGH_TOOL, on:88, off:89},
-  {id:COOLANT_AIR},
+  {id:COOLANT_AIR, on:7},
   {id:COOLANT_AIR_THROUGH_TOOL},
   {id:COOLANT_SUCTION},
   {id:COOLANT_FLOOD_MIST},
@@ -450,6 +470,51 @@ function writeToolBlock() {
 */
 function writeComment(text) {
   writeln(formatComment(text));
+}
+
+function toolBreakControl(tool) {
+  writeComment("TOOL BREAK CONTROL");
+
+  if(getProperty("toolSetterMarcoType") == "pioneer") {
+    writeComment("NO TOOL BREAK CONTROL AVAILABLE IN PIONEER MARCO");
+  } else if (getProperty("toolSetterMarcoType") == "renishaw-primo") {
+    // G65P9921M23.C0.T[tool].
+    writeBlock(gFormat.format(65),
+    "P" + 9921,
+    "M" + ijkFormat.format(23),
+    "C" + ijkFormat.format(0),
+    "T" + ijkFormat.format(tool.number));
+  }
+}
+
+var measureNextTool = false;
+function measureTool(tool) {
+  writeComment("MEASURE TOOL LENGTH");
+
+  if(getProperty("toolSetterMarcoType") == "pioneer") {
+  // Pioneer cycle - diameter only
+  // G65P7002T1.S6.
+  writeBlock(gFormat.format(65),
+             "P" + 7002,
+             "T" + ijkFormat.format(tool.number),
+             "S" + ijkFormat.format(tool.diameter));
+
+  // Pioneer cycle - diameter & radius
+  // G65P7002T1.D1.S6.
+  // writeBlock(gFormat.format(65),
+  //            "P" + 7002,
+  //            "T" + ijkFormat.format(tool.number),
+  //            "D" + ijkFormat.format(tool.number),
+  //            "S" + ijkFormat.format(tool.diameter));
+  } else if (getProperty("toolSetterMarcoType") == "renishaw-primo") {
+    // Renishaw cycle
+    // G65P9921M21.C0.T[tool].
+    writeBlock(gFormat.format(65),
+               "P" + 9921,
+               "M" + ijkFormat.format(21),
+               "C" + ijkFormat.format(0),
+               "T" + ijkFormat.format(tool.number));
+  }
 }
 
 function onOpen() {
@@ -1318,9 +1383,9 @@ function onSection() {
   if (insertToolCall || newWorkOffset || newWorkPlane || smoothing.cancel) {
 
     // stop spindle before retract during tool change
-    if (insertToolCall && !isFirstSection()) {
-      onCommand(COMMAND_STOP_SPINDLE);
-    }
+    // if (insertToolCall && !isFirstSection()) {
+    //   onCommand(COMMAND_STOP_SPINDLE);
+    // }
     disableLengthCompensation();
     if (cancelTiltFirst) {
       skipBlock = _skipBlock;
@@ -1410,6 +1475,11 @@ function onSection() {
         }
         writeComment(localize("ZMIN") + "=" + zRange.getMinimum());
       }
+    }
+
+    if (measureNextTool) {
+      measureTool(tool);
+      measureNextTool = false;
     }
 
     if (getProperty("preloadTool")) {
@@ -1585,8 +1655,7 @@ function onSection() {
   validate(lengthCompensationActive, "Tool length compensation is not active.");
 
   if (isProbeOperation()) {
-    // writeBlock(gFormat.format(65), "P" + 9832); // Turn on probe
-    writeBlock(mFormat.format(80)); // M80 turns on probe
+    onCommand(COMMAND_PROBE_ON);
   }
 
   // define subprogram
@@ -2680,12 +2749,19 @@ function onCommand(command) {
   case COMMAND_STOP_CHIP_TRANSPORT:
     return;
   case COMMAND_BREAK_CONTROL:
+    toolBreakControl(tool);
     return;
   case COMMAND_TOOL_MEASURE:
+    measureNextTool = true;
     return;
   case COMMAND_PROBE_ON:
+    // writeBlock(gFormat.format(65), "P" + 9832); // Turn on probe
+    writeBlock(mFormat.format(80)); // M80 turns on probe
+    writeBlock(mFormat.format(19)); // Spindle lock
     return;
   case COMMAND_PROBE_OFF:
+    // writeBlock(gFormat.format(65), "P" + 9833); // Turn off probe
+    writeBlock(mFormat.format(81)); // M81 turns off probe
     return;
   }
 
@@ -2706,7 +2782,12 @@ function onSectionEnd() {
 
   if (((getCurrentSectionId() + 1) >= getNumberOfSections()) ||
       (tool.number != getNextSection().getTool().number)) {
-    onCommand(COMMAND_BREAK_CONTROL);
+        onCommand(COMMAND_COOLANT_OFF);
+        onCommand(COMMAND_STOP_SPINDLE);
+
+        if (tool.getBreakControl() || (!isProbeOperation() && getProperty("breakControl"))) {
+          onCommand(COMMAND_BREAK_CONTROL);
+        }
   }
   if (!isLastSection() && (getNextSection().getTool().coolant != tool.coolant)) {
     setCoolant(COOLANT_OFF);
@@ -2739,17 +2820,15 @@ function onSectionEnd() {
   forceAny();
 
   if (isProbeOperation()) {
-    // writeBlock(gFormat.format(65), "P" + 9833); // Turn off probe
-
     if(hasNextSection() && (getNextSection().getTool().number != currentSection.getTool().number)) {
-      // Do not turn off probe if there are additional probing operation,
-      // Turning probe on/off quickly seems to hang the controller on next M80.
-      writeBlock(mFormat.format(81)); // M81 turns off probe
+      // Only turn off probe if the next operation is not probing,
+      // Turning probe on/off quickly seems to hang the controller on the next M80 command.
+      onCommand(COMMAND_PROBE_OFF);
     }
 
     if(!hasNextSection()) {
       // Turn off probe if it's the last operation
-      writeBlock(mFormat.format(81)); // M81 turns off probe
+      onCommand(COMMAND_PROBE_OFF);
     }
   }
 
@@ -2854,8 +2933,8 @@ function onClose() {
   writeln("");
   optionalSection = false;
 
-  onCommand(COMMAND_COOLANT_OFF);
-  onCommand(COMMAND_STOP_SPINDLE);
+  onImpliedCommand(COMMAND_COOLANT_OFF);
+  onImpliedCommand(COMMAND_STOP_SPINDLE);
 
   disableLengthCompensation(true);
   cancelWorkPlane();
