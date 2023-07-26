@@ -240,14 +240,6 @@ properties = {
     value      : true,
     scope      : "post"
   },
-  thermalComp: {
-    title      : "Thermal comp",
-    description: "Measure and apply thermal comp",
-    group      : "preferences",
-    type       : "boolean",
-    value      : true,
-    scope      : "post"
-  },
   toolSetterMarcoType: {
     title      : "Tool setter marco",
     description: "Choose whether to use Renishaw or Pinoeer tool setter marco",
@@ -483,12 +475,16 @@ function writeComment(text) {
 function toolBreakControl(tool) {
   writeComment("TOOL BREAK CONTROL");
 
-  // G65P9921M23.C0.T[tool].
-  writeBlock(gFormat.format(65),
-  "P" + 9921,
-  "M" + ijkFormat.format(23),
-  "C" + ijkFormat.format(0),
-  "T" + ijkFormat.format(tool.number));
+  if(getProperty("toolSetterMarcoType") == "pioneer") {
+    writeComment("NO TOOL BREAK CONTROL AVAILABLE IN PIONEER MARCO");
+  } else if (getProperty("toolSetterMarcoType") == "renishaw-primo") {
+    // G65P9921M23.C0.T[tool].
+    writeBlock(gFormat.format(65),
+    "P" + 9921,
+    "M" + ijkFormat.format(23),
+    "C" + ijkFormat.format(0),
+    "T" + ijkFormat.format(tool.number));
+  }
 }
 
 var measureNextTool = false;
@@ -498,10 +494,10 @@ function measureTool(tool) {
   if(getProperty("toolSetterMarcoType") == "pioneer") {
   // Pioneer cycle - diameter only
   // G65P7002T1.S6.
-  // writeBlock(gFormat.format(65),
-  //            "P" + 7002,
-  //            "T" + ijkFormat.format(tool.number),
-  //            "S" + ijkFormat.format(tool.diameter));
+  writeBlock(gFormat.format(65),
+             "P" + 7002,
+             "T" + ijkFormat.format(tool.number),
+             "S" + ijkFormat.format(tool.diameter));
 
   // Pioneer cycle - diameter & radius
   // G65P7002T1.D1.S6.
@@ -519,17 +515,6 @@ function measureTool(tool) {
                "C" + ijkFormat.format(0),
                "T" + ijkFormat.format(tool.number));
   }
-}
-
-function thermalCompTool(tool) {
-  writeComment("MEASURE AND APPLY THERMAL COMP");
-
-  // G65P9921M24.C0.T[tool].
-  writeBlock(gFormat.format(65),
-             "P" + 9921,
-             "M" + ijkFormat.format(24),
-             "C" + ijkFormat.format(0),
-             "T" + ijkFormat.format(tool.number));
 }
 
 function onOpen() {
@@ -1495,8 +1480,6 @@ function onSection() {
     if (measureNextTool) {
       measureTool(tool);
       measureNextTool = false;
-    } else if (getProperty("thermalComp")) {
-      thermalCompTool(tool);
     }
 
     if (getProperty("preloadTool")) {
@@ -1672,8 +1655,7 @@ function onSection() {
   validate(lengthCompensationActive, "Tool length compensation is not active.");
 
   if (isProbeOperation()) {
-    // writeBlock(gFormat.format(65), "P" + 9832); // Turn on probe
-    writeBlock(mFormat.format(80)); // M80 turns on probe
+    onCommand(COMMAND_PROBE_ON);
   }
 
   // define subprogram
@@ -2773,8 +2755,12 @@ function onCommand(command) {
     measureNextTool = true;
     return;
   case COMMAND_PROBE_ON:
+    // writeBlock(gFormat.format(65), "P" + 9832); // Turn on probe
+    writeBlock(mFormat.format(80)); // M80 turns on probe
     return;
   case COMMAND_PROBE_OFF:
+    // writeBlock(gFormat.format(65), "P" + 9833); // Turn off probe
+    writeBlock(mFormat.format(81)); // M81 turns off probe
     return;
   }
 
@@ -2833,17 +2819,15 @@ function onSectionEnd() {
   forceAny();
 
   if (isProbeOperation()) {
-    // writeBlock(gFormat.format(65), "P" + 9833); // Turn off probe
-
     if(hasNextSection() && (getNextSection().getTool().number != currentSection.getTool().number)) {
-      // Do not turn off probe if there are additional probing operation,
-      // Turning probe on/off quickly seems to hang the controller on next M80.
-      writeBlock(mFormat.format(81)); // M81 turns off probe
+      // Only turn off probe if the next operation is not probing,
+      // Turning probe on/off quickly seems to hang the controller on the next M80 command.
+      onCommand(COMMAND_PROBE_OFF);
     }
 
     if(!hasNextSection()) {
       // Turn off probe if it's the last operation
-      writeBlock(mFormat.format(81)); // M81 turns off probe
+      onCommand(COMMAND_PROBE_OFF);
     }
   }
 
