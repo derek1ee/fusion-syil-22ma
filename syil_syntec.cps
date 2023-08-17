@@ -1494,19 +1494,26 @@ function defineWorkPlane(_section, _setWorkPlane) {
     }
     setRotation(remaining);
   }
-  if (currentSection && (currentSection.getId() == _section.getId())) {
-    tcp.isSupportedByOperation = currentSection.getOptimizedTCPMode() == OPTIMIZE_NONE;
-    if (!currentSection.isMultiAxis() && (settings.workPlaneMethod.useTiltedWorkplane || isSameDirection(machineConfiguration.getSpindleAxis(), currentSection.workPlane.forward))) {
-      tcp.isSupportedByOperation = false;
-    }
-  }
+  tcp.isSupportedByOperation = isTCPSupportedByOperation(_section);
   return abc;
+}
+
+function isTCPSupportedByOperation(_section) {
+  var _tcp = _section.getOptimizedTCPMode() == OPTIMIZE_NONE;
+  if (!_section.isMultiAxis() && (settings.workPlaneMethod.useTiltedWorkplane ||
+    isSameDirection(machineConfiguration.getSpindleAxis(), getForwardDirection(_section)) ||
+    settings.workPlaneMethod.optimizeType == OPTIMIZE_HEADS ||
+    settings.workPlaneMethod.optimizeType == OPTIMIZE_TABLES ||
+    settings.workPlaneMethod.optimizeType == OPTIMIZE_BOTH)) {
+    _tcp = false;
+  }
+  return _tcp;
 }
 // <<<<< INCLUDED FROM include_files/defineWorkPlane.cpi
 // >>>>> INCLUDED FROM include_files/getWorkPlaneMachineABC.cpi
 validate(settings.machineAngles, "Setting 'machineAngles' is required but not defined.");
 function getWorkPlaneMachineABC(_section, rotate) {
-  var currentABC = isFirstSection() ? new Vector(0, 0, 0) : getCurrentDirection();
+  var currentABC = isFirstSection() ? new Vector(0, 0, 0) : getCurrentABC();
   var abc = machineConfiguration.getABCByPreference(_section.workPlane, currentABC, settings.machineAngles.controllingAxis, settings.machineAngles.type, settings.machineAngles.options);
   if (!isSameDirection(machineConfiguration.getDirection(abc), _section.workPlane.forward)) {
     error(localize("Orientation not supported."));
@@ -1516,7 +1523,6 @@ function getWorkPlaneMachineABC(_section, rotate) {
       var useTCP = false;
       var R = machineConfiguration.getRemainingOrientation(abc, _section.workPlane);
       setRotation(useTCP ? _section.workPlane : R);
-      setCurrentDirection(currentABC); // temporary fix for currentDirection
     } else {
       if (!_section.isOptimizedForMachine()) {
         machineConfiguration.setToolLength(compensateToolLength ? _section.getTool().overallLength : 0); // define the tool length for head adjustments
@@ -2424,45 +2430,28 @@ function subprogramIsValid(_section, subprogramId, subprogramType) {
   return (validSubprogram);
 }
 
-function setAxisMode(_format, _output, _prefix, _value, _incr) {
-  var i = _output.isEnabled();
-  var _onChange = _output.onChange;
-  _output = _incr ? createIncrementalVariable({prefix:_prefix}, _format) : createVariable({prefix:_prefix}, _format);
-  if (_onChange != undefined) {
-    setOnChange(_output, _onChange);
+/**
+ * Sets xyz and abc output formats to incremental or absolute type
+ * @param {boolean} incremental true: Sets incremental mode, false: Sets absolute mode
+ * @param {Vector} xyz Linear axis values for formating
+ * @param {Vector} abc Rotary axis values for formating
+*/
+
+function setAbsIncMode(incremental, xyz, abc) {
+  var outputFormats = [xOutput, yOutput, zOutput, aOutput, bOutput, cOutput];
+  for (var i = 0; i < outputFormats.length; ++i) {
+    outputFormats[i].setType(incremental ? TYPE_INCREMENTAL : TYPE_ABSOLUTE);
+    if (i <= 2) { // xyz
+      outputFormats[i].setCurrent(xyz.getCoordinate(i));
+    } else { // abc
+      outputFormats[i].setCurrent(abc.getCoordinate(i - 3));
+    }
   }
-  _output.format(_value);
-  _output.format(_value);
-  i = i ? _output.enable() : _output.disable();
-  return _output;
-}
-
-/** Set incremental mode on **/
-function setIncrementalMode(xyz, abc) {
-  xOutput = setAxisMode(xyzFormat, xOutput, "X", xyz.x, true);
-  yOutput = setAxisMode(xyzFormat, yOutput, "Y", xyz.y, true);
-  zOutput = setAxisMode(xyzFormat, zOutput, "Z", xyz.z, true);
-  aOutput = setAxisMode(abcFormat, aOutput, "A", abc.x, true);
-  bOutput = setAxisMode(abcFormat, bOutput, "B", abc.y, true);
-  cOutput = setAxisMode(abcFormat, cOutput, "C", abc.z, true);
-  gAbsIncModal.reset();
-  writeBlock(gAbsIncModal.format(91));
-  subprogramState.incrementalMode = true;
-}
-
-/** Set incremental mode off **/
-function setAbsoluteMode(xyz, abc) {
-  if (subprogramState.incrementalMode) {
-    xOutput = setAxisMode(xyzFormat, xOutput, "X", xyz.x, false);
-    yOutput = setAxisMode(xyzFormat, yOutput, "Y", xyz.y, false);
-    zOutput = setAxisMode(xyzFormat, zOutput, "Z", xyz.z, false);
-    aOutput = setAxisMode(abcFormat, aOutput, "A", abc.x, false);
-    bOutput = setAxisMode(abcFormat, bOutput, "B", abc.y, false);
-    cOutput = setAxisMode(abcFormat, cOutput, "C", abc.z, false);
+  subprogramState.incrementalMode = incremental;
+  if (incremental) {
     gAbsIncModal.reset();
-    writeBlock(gAbsIncModal.format(90));
-    subprogramState.incrementalMode = false;
   }
+  writeBlock(gAbsIncModal.format(incremental ? 91 : 90));
 }
 
 function setCyclePosition(_position) {
@@ -2715,12 +2704,13 @@ function setWorkPlane(abc) {
     if (!retracted) {
       writeRetract(Z);
     }
+    if (currentSection.getId() > 0 && (isTCPSupportedByOperation(getSection(currentSection.getId() - 1) || tcp.isSupportedByOperation)) && typeof disableLengthCompensation == "function") {
+      disableLengthCompensation(); // cancel TCP
+    }
 
     if (settings.workPlaneMethod.useTiltedWorkplane) {
       onCommand(COMMAND_UNLOCK_MULTI_AXIS);
-      if (settings.workPlaneMethod.cancelTiltFirst) {
-        cancelWorkPlane();
-      }
+      cancelWorkPlane();
       if (machineConfiguration.isMultiAxisConfiguration()) {
         var machineABC = abc.isNonZero() ? (currentSection.isMultiAxis() ? getCurrentDirection() : getWorkPlaneMachineABC(currentSection, false)) : abc;
         if (settings.workPlaneMethod.useABCPrepositioning || machineABC.isZero()) {
@@ -2729,17 +2719,13 @@ function setWorkPlane(abc) {
           setCurrentABC(machineABC);
         }
       }
-      if (abc.isNonZero()) {
+      if (abc.isNonZero() || !machineConfiguration.isMultiAxisConfiguration()) {
         gRotationModal.reset();
         writeBlock(
           gRotationModal.format(68.2), "X" + xyzFormat.format(currentSection.workOrigin.x), "Y" + xyzFormat.format(currentSection.workOrigin.y), "Z" + xyzFormat.format(currentSection.workOrigin.z),
           "I" + abcFormat.format(abc.x), "J" + abcFormat.format(abc.y), "K" + abcFormat.format(abc.z)
         ); // set frame
-        writeBlock(gFormat.format(53.2)); // turn machine
-      } else {
-        if (!settings.workPlaneMethod.cancelTiltFirst) {
-          cancelWorkPlane();
-        }
+        writeBlock(gFormat.format(53.1)); // turn machine
       }
     } else {
       positionABC(abc, true);
