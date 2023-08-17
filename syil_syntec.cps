@@ -1325,9 +1325,10 @@ function subprogramsAreSupported() {
 // >>>>> INCLUDED FROM include_files/defineMachine.cpi
 var compensateToolLength = false; // add the tool length to the pivot distance for nonTCP rotary heads
 function defineMachine() {
-  var useTCP = true;
+  var useTCP = false; // 22MA doesn't support RTCP/G43.4, set to `true` for 220MA
+
   if (true) { // note: setup your machine here
-    var aAxis = createAxis({coordinate:X, table:true, axis:[1, 0, 0], range:[-180, 180], cyclic: true, preference:1, tcp:useTCP});
+    var aAxis = createAxis({coordinate:0, table:true, axis:[1, 0, 0], range:[-180, 180], cyclic: true, preference:1, tcp:useTCP});
     //var cAxis = createAxis({coordinate:2, table:true, axis:[0, 0, 1], range:[-360, 360], preference:0, tcp:useTCP});
     machineConfiguration = new MachineConfiguration(aAxis);
 
@@ -2596,10 +2597,10 @@ function setWorkPlane(abc) {
       if (abc.isNonZero()) {
         gRotationModal.reset();
         writeBlock(
-          gRotationModal.format(68.2), "X" + xyzFormat.format(currentSection.workOrigin.x), "Y" + xyzFormat.format(currentSection.workOrigin.y), "Z" + xyzFormat.format(currentSection.workOrigin.z),
+          gRotationModal.format(68), "X" + xyzFormat.format(currentSection.workOrigin.x), "Y" + xyzFormat.format(currentSection.workOrigin.y), "Z" + xyzFormat.format(currentSection.workOrigin.z),
           "I" + abcFormat.format(abc.x), "J" + abcFormat.format(abc.y), "K" + abcFormat.format(abc.z)
-        ); // set frame
-        writeBlock(gFormat.format(53.1)); // turn machine
+        ); // set frame, use G68 instead of G68.2 since G68.2 is an optional feature not available on most machines
+        writeBlock(gFormat.format(53)); // turn machine, use G53 in conjunction with G68 command above
       } else {
         if (!settings.workPlaneMethod.cancelTiltFirst) {
           cancelWorkPlane();
