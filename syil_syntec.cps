@@ -6,8 +6,8 @@
   Modified by Derek Li.
   https://github.com/derek1ee/fusion-syil-22ma
 
-  $Revision: 44079 $
-  $Date: 2023-08-02 $
+  $Revision: 44084 $
+  $Date: 2023-08-17 $
 */
 
 description = "Unofficial Post for Syil w/ Syntec Controller";
@@ -37,22 +37,6 @@ highFeedrate = (unit == IN) ? 500 : 5000;
 
 // user-defined properties
 properties = {
-  writeMachine: {
-    title      : "Write machine",
-    description: "Output the machine settings in the header of the code.",
-    group      : "formats",
-    type       : "boolean",
-    value      : true,
-    scope      : "post"
-  },
-  writeTools: {
-    title      : "Write tool list",
-    description: "Output a tool list in the header of the code.",
-    group      : "formats",
-    type       : "boolean",
-    value      : true,
-    scope      : "post"
-  },
   preloadTool: {
     title      : "Preload tool",
     description: "Preloads the next tool at a tool change (if any).",
@@ -174,22 +158,6 @@ properties = {
     value      : false,
     scope      : "post"
   },
-  useSubroutines: {
-    title      : "Use subroutines",
-    description: "Select your desired subroutine option. 'All Operations' creates subroutines per each operation, 'Cycles' creates subroutines for cycle operations on same holes, and 'Patterns' creates subroutines for patterned operations.",
-    group      : "preferences",
-    type       : "enum",
-    values     : [
-      {title:"No", id:"none"},
-      {title:"All Operations", id:"allOperations"},
-      {title:"All Operations & Patterns", id:"allPatterns"},
-      {title:"Cycles", id:"cycles"},
-      {title:"Operations, Patterns, Cycles", id:"all"},
-      {title:"Patterns", id:"patterns"}
-    ],
-    value: "none",
-    scope: "post"
-  },
   reverseAAxis: {
     title      : "Reverse A-axis",
     description: "Makes the A-axis rotate the opposite way.",
@@ -225,14 +193,6 @@ properties = {
     ],
     value: "G28",
     scope: "post"
-  },
-  useParametricFeed: {
-    title      : "Parametric feed",
-    description: "Specifies the feed value that should be output using a Q value.",
-    group      : "preferences",
-    type       : "boolean",
-    value      : false,
-    scope      : "post"
   },
   useDPMFeeds: {
     title      : "useDPMFeeds",
@@ -321,15 +281,15 @@ var oFormat = createFormat({width:4, zeropad:true, decimals:0});
 var peckFormat = createFormat({decimals:(unit == MM ? 3 : 4), forceDecimal:true});
 // var peckFormat = createFormat({decimals:0, forceDecimal:false, trim:false, width:4, zeropad:true, scale:(unit == MM ? 1000 : 10000)});
 
-var xOutput = createVariable({prefix:"X"}, xyzFormat);
-var yOutput = createVariable({prefix:"Y"}, xyzFormat);
-var zOutput = createVariable({onchange:function() {retracted = false;}, prefix:"Z"}, xyzFormat);
+var xOutput = createOutputVariable({prefix:"X"}, xyzFormat);
+var yOutput = createOutputVariable({prefix:"Y"}, xyzFormat);
+var zOutput = createOutputVariable({onchange:function() {retracted = false;}, prefix:"Z"}, xyzFormat);
 var toolVectorOutputI = createOutputVariable({prefix:"I", control:CONTROL_FORCE}, ijkFormat);
 var toolVectorOutputJ = createOutputVariable({prefix:"J", control:CONTROL_FORCE}, ijkFormat);
 var toolVectorOutputK = createOutputVariable({prefix:"K", control:CONTROL_FORCE}, ijkFormat);
-var aOutput = createVariable({prefix:"A"}, abcFormat);
-var bOutput = createVariable({prefix:"B"}, abcFormat);
-var cOutput = createVariable({prefix:"C"}, abcFormat);
+var aOutput = createOutputVariable({prefix:"A"}, abcFormat);
+var bOutput = createOutputVariable({prefix:"B"}, abcFormat);
+var cOutput = createOutputVariable({prefix:"C"}, abcFormat);
 var feedOutput = createOutputVariable({prefix:"F"}, feedFormat);
 var inverseTimeOutput = createOutputVariable({prefix:"F", control:CONTROL_FORCE}, inverseTimeFormat);
 var pitchOutput = createOutputVariable({prefix:"F", control:CONTROL_FORCE}, pitchFormat);
@@ -337,9 +297,9 @@ var sOutput = createOutputVariable({prefix:"S", control:CONTROL_FORCE}, rpmForma
 var peckOutput = createOutputVariable({prefix:"Q", control:CONTROL_FORCE}, peckFormat);
 
 // circular output
-var iOutput = createReferenceVariable({prefix:"I"}, xyzFormat);
-var jOutput = createReferenceVariable({prefix:"J"}, xyzFormat);
-var kOutput = createReferenceVariable({prefix:"K"}, xyzFormat);
+var iOutput = createOutputVariable({prefix:"I", control:CONTROL_NONZERO}, xyzFormat);
+var jOutput = createOutputVariable({prefix:"J", control:CONTROL_NONZERO}, xyzFormat);
+var kOutput = createOutputVariable({prefix:"K", control:CONTROL_NONZERO}, xyzFormat);
 
 var gMotionModal = createOutputVariable({}, gFormat); // modal group 1 // G0-G3, ...
 var gPlaneModal = createOutputVariable({onchange:function () {gMotionModal.reset();}}, gFormat); // modal group 2 // G17-19
@@ -438,11 +398,11 @@ var settings = {
     callBlock              : {files:[mFormat.format(98) + " H"], embedded:[mFormat.format(98) + " H"]} // specifies the command for calling a subprogram followed by the subprogram number
   },
   comments: {
-    permittedCommentChars: " abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.,=_-",
+    permittedCommentChars: " abcdefghijklmnopqrstuvwxyz0123456789.,=_-", // letters are not case sensitive, use option 'outputFormat' below. Set to 'undefined' to allow any character
     prefix               : "(", // specifies the prefix for the comment
     suffix               : ")", // specifies the suffix for the comment
-    upperCase            : true, // set to true to output all comments in upper case
-    maximumLineLength    : 80, // the maximum number of charaters allowed in a line, set to 0 to disable comment output
+    outputFormat         : "upperCase", // can be set to "upperCase", "lowerCase" and "ignoreCase". Set to "ignoreCase" to write comments without upper/lower case formatting
+    maximumLineLength    : 80 // the maximum number of characters allowed in a line, set to 0 to disable comment output
   },
   maximumSequenceNumber   : undefined, // the maximum sequence number (Nxxx), use 'undefined' for unlimited
   supportsToolVectorOutput: true // specifies if the control does support tool axis vector output for multi axis toolpath
@@ -477,7 +437,7 @@ function onOpen() {
       return;
     }
     feedFormat = createFormat({decimals:(unit == MM ? 4 : 5), forceDecimal:true});
-    feedOutput = createOutputVariable({prefix:"F"}, feedFormat);
+    feedOutput.setFormat(feedFormat);
   }
 
   writeln("%");
@@ -938,6 +898,7 @@ function onReturnFromSafeRetractPosition(_x, _y, _z) {
 // End of onRewindMachine logic
 
 function onClose() {
+  optionalSection = false;
   writeln("");
   onCommand(COMMAND_STOP_SPINDLE);
   onCommand(COMMAND_COOLANT_OFF);
@@ -1230,8 +1191,25 @@ validate(settings.comments, "Setting 'comments' is required but not defined.");
 function formatComment(text) {
   var prefix = settings.comments.prefix;
   var suffix = settings.comments.suffix;
-  text = settings.comments.upperCase ? text.toUpperCase() : text;
-  text = filterText(String(text), settings.comments.permittedCommentChars).replace(/[()]/g, "");
+  var _permittedCommentChars = settings.comments.permittedCommentChars == undefined ? "" : settings.comments.permittedCommentChars;
+  switch (settings.comments.outputFormat) {
+  case "upperCase":
+    text = text.toUpperCase();
+    _permittedCommentChars = _permittedCommentChars.toUpperCase();
+    break;
+  case "lowerCase":
+    text = text.toLowerCase();
+    _permittedCommentChars = _permittedCommentChars.toLowerCase();
+    break;
+  case "ignoreCase":
+    _permittedCommentChars = _permittedCommentChars.toUpperCase() + _permittedCommentChars.toLowerCase();
+    break;
+  default:
+    error(localize("Unsupported option specified for setting 'comments.outputFormat'."));
+  }
+  if (_permittedCommentChars != "") {
+    text = filterText(String(text), _permittedCommentChars);
+  }
   text = String(text).substring(0, settings.comments.maximumLineLength - prefix.length - suffix.length);
   return text != "" ?  prefix + text + suffix : "";
 }
@@ -1243,7 +1221,7 @@ function writeComment(text) {
   if (!text) {
     return;
   }
-  var comments = String(text).split("\n");
+  var comments = String(text).split(EOL);
   for (comment in comments) {
     var _comment = formatComment(comments[comment]);
     if (_comment) {
@@ -1341,6 +1319,28 @@ function getSetting(setting, defaultValue) {
   return result;
 }
 
+function getForwardDirection(_section) {
+  var forward = undefined;
+  var _optimizeType = settings.workPlaneMethod && settings.workPlaneMethod.optimizeType;
+  if (_section.isMultiAxis()) {
+    forward = _section.workPlane.forward;
+  } else if (!getSetting("workPlaneMethod.useTiltedWorkplane", false) && machineConfiguration.isMultiAxisConfiguration()) {
+    if (_optimizeType == undefined) {
+      var saveRotation = getRotation();
+      getWorkPlaneMachineABC(_section, true);
+      forward = getRotation().forward;
+      setRotation(saveRotation); // reset rotation
+    } else {
+      var abc = getWorkPlaneMachineABC(_section, false);
+      var forceAdjustment = settings.workPlaneMethod.optimizeType == OPTIMIZE_TABLES || settings.workPlaneMethod.optimizeType == OPTIMIZE_BOTH;
+      forward = machineConfiguration.getOptimizedDirection(_section.workPlane.forward, abc, false, forceAdjustment);
+    }
+  } else {
+    forward = getRotation().forward;
+  }
+  return forward;
+}
+
 function getRetractParameters() {
   var words = []; // store all retracted axes in an array
   var retractAxes = new Array(false, false, false);
@@ -1404,7 +1404,7 @@ function subprogramsAreSupported() {
 // >>>>> INCLUDED FROM include_files/defineMachine.cpi
 var compensateToolLength = false; // add the tool length to the pivot distance for nonTCP rotary heads
 function defineMachine() {
-  var useTCP = false; // 22MA doesn't support RTCP/G43.4, set to `true` for 220MA
+  var useTCP = false; // Syil machines with 22MA doesn't have RTCP/G43.4 option enabled by default
 
   if (true) { // note: setup your machine here
     var aAxis = createAxis({coordinate:0, table:true, axis:[(getProperty("reverseAAxis") ? -1 : 1) * -1, 0, 0], range:[0, 360], cyclic: true, preference:1, tcp:useTCP});
@@ -1620,6 +1620,14 @@ function startSpindle(tool, insertToolCall) {
 }
 // <<<<< INCLUDED FROM include_files/startSpindle.cpi
 // >>>>> INCLUDED FROM include_files/parametricFeeds.cpi
+properties.useParametricFeed = {
+  title      : "Parametric feed",
+  description: "Specifies that the feedrates should be output using parameters.",
+  group      : "preferences",
+  type       : "boolean",
+  value      : false,
+  scope      : "post"
+};
 var activeMovements;
 var currentFeedId;
 validate(settings.parametricFeeds, "Setting 'parametricFeeds' is required but not defined.");
@@ -1644,7 +1652,9 @@ function initializeParametricFeeds(insertToolCall) {
       var feedContext = new FeedContext(id, localize("Cutting"), getParameter("operation:tool_feedCutting"));
       activeFeeds.push(feedContext);
       activeMovements[MOVEMENT_CUTTING] = feedContext;
-      activeMovements[MOVEMENT_LINK_TRANSITION] = feedContext;
+      if (!hasParameter("operation:tool_feedTransition")) {
+        activeMovements[MOVEMENT_LINK_TRANSITION] = feedContext;
+      }
       activeMovements[MOVEMENT_EXTENDED] = feedContext;
     }
     ++id;
@@ -1655,7 +1665,6 @@ function initializeParametricFeeds(insertToolCall) {
     }
     ++id;
   }
-
   if (hasParameter("operation:finishFeedrate")) {
     if (movements & (1 << MOVEMENT_FINISH_CUTTING)) {
       var feedContext = new FeedContext(id, localize("Finish"), getParameter("operation:finishFeedrate"));
@@ -1671,7 +1680,6 @@ function initializeParametricFeeds(insertToolCall) {
     }
     ++id;
   }
-
   if (hasParameter("operation:tool_feedEntry")) {
     if (movements & (1 << MOVEMENT_LEAD_IN)) {
       var feedContext = new FeedContext(id, localize("Entry"), getParameter("operation:tool_feedEntry"));
@@ -1680,7 +1688,6 @@ function initializeParametricFeeds(insertToolCall) {
     }
     ++id;
   }
-
   if (hasParameter("operation:tool_feedExit")) {
     if (movements & (1 << MOVEMENT_LEAD_OUT)) {
       var feedContext = new FeedContext(id, localize("Exit"), getParameter("operation:tool_feedExit"));
@@ -1689,7 +1696,6 @@ function initializeParametricFeeds(insertToolCall) {
     }
     ++id;
   }
-
   if (hasParameter("operation:noEngagementFeedrate")) {
     if (movements & (1 << MOVEMENT_LINK_DIRECT)) {
       var feedContext = new FeedContext(id, localize("Direct"), getParameter("operation:noEngagementFeedrate"));
@@ -1707,7 +1713,6 @@ function initializeParametricFeeds(insertToolCall) {
     }
     ++id;
   }
-
   if (hasParameter("operation:reducedFeedrate")) {
     if (movements & (1 << MOVEMENT_REDUCED)) {
       var feedContext = new FeedContext(id, localize("Reduced"), getParameter("operation:reducedFeedrate"));
@@ -1716,7 +1721,6 @@ function initializeParametricFeeds(insertToolCall) {
     }
     ++id;
   }
-
   if (hasParameter("operation:tool_feedRamp")) {
     if (movements & ((1 << MOVEMENT_RAMP) | (1 << MOVEMENT_RAMP_HELIX) | (1 << MOVEMENT_RAMP_PROFILE) | (1 << MOVEMENT_RAMP_ZIG_ZAG))) {
       var feedContext = new FeedContext(id, localize("Ramping"), getParameter("operation:tool_feedRamp"));
@@ -1748,6 +1752,14 @@ function initializeParametricFeeds(insertToolCall) {
       activeFeeds.push(feedContext);
       activeMovements[MOVEMENT_HIGH_FEED] = feedContext;
       activeMovements[MOVEMENT_RAPID] = feedContext;
+    }
+    ++id;
+  }
+  if (hasParameter("operation:tool_feedTransition")) {
+    if (movements & (1 << MOVEMENT_LINK_TRANSITION)) {
+      var feedContext = new FeedContext(id, localize("Transition"), getParameter("operation:tool_feedTransition"));
+      activeFeeds.push(feedContext);
+      activeMovements[MOVEMENT_LINK_TRANSITION] = feedContext;
     }
     ++id;
   }
@@ -1789,6 +1801,9 @@ function setCoolant(coolant) {
 }
 
 function getCoolantCodes(coolant, format) {
+  if (!getProperty("useCoolant", true)) {
+    return undefined; // coolant output is disabled by property if it exists
+  }
   isOptionalCoolant = false;
   if (typeof operationNeedsSafeStart == "undefined") {
     operationNeedsSafeStart = false;
@@ -1962,6 +1977,22 @@ function initializeSmoothing() {
 }
 // <<<<< INCLUDED FROM include_files/smoothing.cpi
 // >>>>> INCLUDED FROM include_files/writeProgramHeader.cpi
+properties.writeMachine = {
+  title      : "Write machine",
+  description: "Output the machine settings in the header of the program.",
+  group      : "formats",
+  type       : "boolean",
+  value      : true,
+  scope      : "post"
+};
+properties.writeTools = {
+  title      : "Write tool list",
+  description: "Output a tool list in the header of the program.",
+  group      : "formats",
+  type       : "boolean",
+  value      : true,
+  scope      : "post"
+};
 function writeProgramHeader() {
   // dump machine configuration
   var vendor = machineConfiguration.getVendor();
@@ -2021,6 +2052,31 @@ function writeProgramHeader() {
 }
 // <<<<< INCLUDED FROM include_files/writeProgramHeader.cpi
 // >>>>> INCLUDED FROM include_files/subprograms.cpi
+properties.useSubroutines = {
+  title      : "Use subroutines",
+  description: "Select your desired subroutine option. 'All Operations' creates subroutines per each operation, 'Cycles' creates subroutines for cycle operations on same holes, and 'Patterns' creates subroutines for patterned operations.",
+  group      : "preferences",
+  type       : "enum",
+  values     : [
+    {title:"No", id:"none"},
+    {title:"All Operations", id:"allOperations"},
+    {title:"All Operations & Patterns", id:"allPatterns"},
+    {title:"Cycles", id:"cycles"},
+    {title:"Operations, Patterns, Cycles", id:"all"},
+    {title:"Patterns", id:"patterns"}
+  ],
+  value: "none",
+  scope: "post"
+};
+properties.useFilesForSubprograms = {
+  title      : "Use files for subroutines",
+  description: "If enabled, subroutines will be saved as individual files.",
+  group      : "preferences",
+  type       : "boolean",
+  value      : false,
+  scope      : "post"
+};
+
 var NONE = 0x0000;
 var PATTERNS = 0x0001;
 var CYCLES = 0x0010;
@@ -2079,7 +2135,7 @@ function subprogramStart(initialPosition, abc, incremental) {
   subprogramState.saveShowSequenceNumbers = getProperty("showSequenceNumbers");
   setProperty("showSequenceNumbers", "false");
   if (incremental) {
-    setIncrementalMode(initialPosition, abc);
+    setAbsIncMode(true, initialPosition, abc);
   }
   gPlaneModal.reset();
   gMotionModal.reset();
@@ -2106,7 +2162,7 @@ function subprogramEnd() {
       } else {
         abc = getCurrentDirection();
       }
-      setAbsoluteMode(finalPosition, abc);
+      setAbsIncMode(false, finalPosition, abc);
 
       writeBlock(settings.subprograms.endBlock.embedded);
       if (getProperty("useFilesForSubprograms")) {
@@ -2568,13 +2624,13 @@ function onCircular(clockwise, cx, cy, cz, x, y, z, feed) {
     }
     switch (getCircularPlane()) {
     case PLANE_XY:
-      writeBlock(gPlaneModal.format(17), gMotionModal.format(clockwise ? 2 : 3), iOutput.format(cx - start.x, 0), jOutput.format(cy - start.y, 0), getFeed(feed));
+      writeBlock(gPlaneModal.format(17), gMotionModal.format(clockwise ? 2 : 3), iOutput.format(cx - start.x), jOutput.format(cy - start.y), getFeed(feed));
       break;
     case PLANE_ZX:
-      writeBlock(gPlaneModal.format(18), gMotionModal.format(clockwise ? 2 : 3), iOutput.format(cx - start.x, 0), kOutput.format(cz - start.z, 0), getFeed(feed));
+      writeBlock(gPlaneModal.format(18), gMotionModal.format(clockwise ? 2 : 3), iOutput.format(cx - start.x), kOutput.format(cz - start.z), getFeed(feed));
       break;
     case PLANE_YZ:
-      writeBlock(gPlaneModal.format(19), gMotionModal.format(clockwise ? 2 : 3), jOutput.format(cy - start.y, 0), kOutput.format(cz - start.z, 0), getFeed(feed));
+      writeBlock(gPlaneModal.format(19), gMotionModal.format(clockwise ? 2 : 3), jOutput.format(cy - start.y), kOutput.format(cz - start.z), getFeed(feed));
       break;
     default:
       linearize(tolerance);
@@ -2582,13 +2638,13 @@ function onCircular(clockwise, cx, cy, cz, x, y, z, feed) {
   } else if (!getProperty("useRadius")) {
     switch (getCircularPlane()) {
     case PLANE_XY:
-      writeBlock(gPlaneModal.format(17), gMotionModal.format(clockwise ? 2 : 3), xOutput.format(x), yOutput.format(y), zOutput.format(z), iOutput.format(cx - start.x, 0), jOutput.format(cy - start.y, 0), getFeed(feed));
+      writeBlock(gPlaneModal.format(17), gMotionModal.format(clockwise ? 2 : 3), xOutput.format(x), yOutput.format(y), zOutput.format(z), iOutput.format(cx - start.x), jOutput.format(cy - start.y), getFeed(feed));
       break;
     case PLANE_ZX:
-      writeBlock(gPlaneModal.format(18), gMotionModal.format(clockwise ? 2 : 3), xOutput.format(x), yOutput.format(y), zOutput.format(z), iOutput.format(cx - start.x, 0), kOutput.format(cz - start.z, 0), getFeed(feed));
+      writeBlock(gPlaneModal.format(18), gMotionModal.format(clockwise ? 2 : 3), xOutput.format(x), yOutput.format(y), zOutput.format(z), iOutput.format(cx - start.x), kOutput.format(cz - start.z), getFeed(feed));
       break;
     case PLANE_YZ:
-      writeBlock(gPlaneModal.format(19), gMotionModal.format(clockwise ? 2 : 3), xOutput.format(x), yOutput.format(y), zOutput.format(z), jOutput.format(cy - start.y, 0), kOutput.format(cz - start.z, 0), getFeed(feed));
+      writeBlock(gPlaneModal.format(19), gMotionModal.format(clockwise ? 2 : 3), xOutput.format(x), yOutput.format(y), zOutput.format(z), jOutput.format(cy - start.y), kOutput.format(cz - start.z), getFeed(feed));
       break;
     default:
       if (getProperty("allow3DArcs")) {
@@ -2741,7 +2797,15 @@ function writeRetract() {
   writeInitialPositioning(initialPosition, isRequired, myVar1, myVar2);
 */
 function writeInitialPositioning(position, isRequired, codes1, codes2) {
-  var motionCode = (highFeedMapping != HIGH_FEED_NO_MAPPING) ? 1 : 0;
+  var motionCode = {single:0, multi:0};
+  switch (highFeedMapping) {
+  case HIGH_FEED_MAP_ANY:
+    motionCode = {single:1, multi:1}; // map all rapid traversals to high feed
+    break;
+  case HIGH_FEED_MAP_MULTI:
+    motionCode = {single:0, multi:1}; // map rapid traversal along more than one axis to high feed
+    break;
+  }
   var feed = (highFeedMapping != HIGH_FEED_NO_MAPPING) ? getFeed(highFeedrate) : "";
   var gOffset = getSetting("outputToolLengthCompensation", true) ? gFormat.format(getOffsetCode()) : "";
   var hOffset = getSetting("outputToolLengthOffset", true) ? hFormat.format(tool.lengthOffset) : "";
@@ -2762,20 +2826,20 @@ function writeInitialPositioning(position, isRequired, codes1, codes2) {
       var prePosition = W.getTransposed().multiply(position);
       var angles = W.getEuler2(settings.workPlaneMethod.eulerConvention);
       setWorkPlane(angles);
-      writeBlock(modalCodes, gMotionModal.format(motionCode), xOutput.format(prePosition.x), yOutput.format(prePosition.y), feed, additionalCodes[0]);
+      writeBlock(modalCodes, gMotionModal.format(motionCode.multi), xOutput.format(prePosition.x), yOutput.format(prePosition.y), feed, additionalCodes[0]);
       cancelWorkPlane();
       writeBlock(gOffset, hOffset, additionalCodes[1]); // omit Z-axis output is desired
       lengthCompensationActive = true;
       forceAny(); // required to output XYZ coordinates in the following line
     } else {
       if (machineConfiguration.isHeadConfiguration()) {
-        writeBlock(modalCodes, gMotionModal.format(motionCode), gOffset,
+        writeBlock(modalCodes, gMotionModal.format(motionCode.multi), gOffset,
           xOutput.format(position.x), yOutput.format(position.y), zOutput.format(position.z),
           hOffset, feed, additionalCodes
         );
       } else {
-        writeBlock(modalCodes, gMotionModal.format(motionCode), xOutput.format(position.x), yOutput.format(position.y), feed, additionalCodes[0]);
-        writeBlock(gMotionModal.format(motionCode), gOffset, zOutput.format(position.z), hOffset, additionalCodes[1]);
+        writeBlock(modalCodes, gMotionModal.format(motionCode.multi), xOutput.format(position.x), yOutput.format(position.y), feed, additionalCodes[0]);
+        writeBlock(gMotionModal.format(motionCode.single), gOffset, zOutput.format(position.z), hOffset, additionalCodes[1]);
       }
       lengthCompensationActive = true;
     }
@@ -2789,10 +2853,10 @@ function writeInitialPositioning(position, isRequired, codes1, codes2) {
   if (!isRequired) { // simple positioning
     var modalCodes = formatWords(gAbsIncModal.format(90), gPlaneModal.format(17));
     if (!retracted && xyzFormat.getResultingValue(getCurrentPosition().z) < xyzFormat.getResultingValue(position.z)) {
-      writeBlock(modalCodes, gMotionModal.format(motionCode), zOutput.format(position.z), feed);
+      writeBlock(modalCodes, gMotionModal.format(motionCode.single), zOutput.format(position.z), feed);
     }
     forceXYZ();
-    writeBlock(modalCodes, gMotionModal.format(motionCode), xOutput.format(position.x), yOutput.format(position.y), feed, additionalCodes);
+    writeBlock(modalCodes, gMotionModal.format(motionCode.multi), xOutput.format(position.x), yOutput.format(position.y), feed, additionalCodes);
   }
 }
 
@@ -2812,14 +2876,9 @@ Matrix.getOrientationFromDirection = function (ijk) {
 // <<<<< INCLUDED FROM include_files/initialPositioning_fanuc.cpi
 // >>>>> INCLUDED FROM include_files/getOffsetCode_fanuc.cpi
 function getOffsetCode() {
-  // assumes a head configuration uses TCP on a Fanuc controller
   var offsetCode = 43;
-  if (currentSection.isMultiAxis()) {
-    if (machineConfiguration.isMultiAxisConfiguration() && tcp.isSupportedByOperation) {
-      offsetCode = 43.4;
-    } else if (!machineConfiguration.isMultiAxisConfiguration()) {
-      offsetCode = 43.5;
-    }
+  if (tcp.isSupportedByOperation) {
+    offsetCode = machineConfiguration.isMultiAxisConfiguration() ? 43.4 : 43.5;
   }
   return offsetCode;
 }
@@ -2852,7 +2911,7 @@ function writeProgramNumber() {
 // <<<<< INCLUDED FROM include_files/writeProgramNumber_fanuc.cpi
 // >>>>> INCLUDED FROM include_files/drillCycles_fanuc.cpi
 function writeDrillCycle(cycle, x, y, z) {
-  if (!isSameDirection(getRotation().forward, new Vector(0, 0, 1))) {
+  if (!isSameDirection(machineConfiguration.getSpindleAxis(), getForwardDirection(currentSection))) {
     expandCyclePoint(x, y, z);
     return;
   }
