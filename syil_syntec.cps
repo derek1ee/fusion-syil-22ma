@@ -190,6 +190,14 @@ properties = {
     value: "none",
     scope: "post"
   },
+  reverseAAxis: {
+    title      : "Reverse A-axis",
+    description: "Makes the A-axis rotate the opposite way.",
+    group      : "configuration",
+    type       : "boolean",
+    value      : false,
+    scope      : "post"
+  },
   safeStartAllOperations: {
     title      : "Safe start all operations",
     description: "Write optional blocks at the beginning of all operations that include all commands to start program.",
@@ -231,7 +239,7 @@ properties = {
     description: "useDPMFeeds.",
     group      : "preferences",
     type       : "boolean",
-    value      : true,
+    value      : false,
     scope      : "post"
   },
   endOfProgramTableX: {
@@ -626,6 +634,12 @@ function onCycleEnd() {
   }
 }
 
+/** Convert approach to sign. */
+function approach(value) {
+  validate((value == "positive") || (value == "negative"), "Invalid approach.");
+  return (value == "positive") ? 1 : -1;
+}
+
 function setProbeAngleMethod() {
   return;
   // probeVariables.probeAngleMethod = (machineConfiguration.getNumberOfAxes() < 5 || is3D()) ? (getProperty("useG54x4") ? "G54.4" : "G68") : "UNSUPPORTED";
@@ -640,18 +654,64 @@ function setProbeAngleMethod() {
   // probeVariables.outputRotationCodes = true;
 }
 
+/** Output rotation offset based on angular probing cycle. */
+function setProbeAngle() {
+  if (probeVariables.outputRotationCodes) {
+    var probeOutputWorkOffset = currentSection.probeWorkOffset;
+    validate(probeOutputWorkOffset <= 6, "Angular Probing only supports work offsets 1-6.");
+    if (probeVariables.probeAngleMethod == "G68" && (Vector.diff(currentSection.getGlobalInitialToolAxis(), new Vector(0, 0, 1)).length > 1e-4)) {
+      error(localize("You cannot use multi axis toolpaths while G68 Rotation is in effect."));
+    }
+    var validateWorkOffset = false;
+    switch (probeVariables.probeAngleMethod) {
+    case "G54.4":
+      var param = 26000 + (probeOutputWorkOffset * 10);
+      writeBlock("#" + param + "=#135");
+      writeBlock("#" + (param + 1) + "=#136");
+      writeBlock("#" + (param + 5) + "=#144");
+      writeBlock(gFormat.format(54.4), "P" + probeOutputWorkOffset);
+      break;
+    case "G68":
+      gRotationModal.reset();
+      gAbsIncModal.reset();
+      writeBlock(gRotationModal.format(68), gAbsIncModal.format(90), probeVariables.compensationXY, "R[#194]");
+      validateWorkOffset = true;
+      break;
+    case "AXIS_ROT":
+      var param = 5200 + probeOutputWorkOffset * 20 + probeVariables.rotationalAxis + 4;
+      writeBlock("#" + param + " = " + "[#" + param + " + #194]");
+      forceWorkPlane(); // force workplane to rotate ABC in order to apply rotation offsets
+      currentWorkOffset = undefined; // force WCS output to make use of updated parameters
+      validateWorkOffset = true;
+      break;
+    default:
+      error(localize("Angular Probing is not supported for this machine configuration."));
+      return;
+    }
+    if (validateWorkOffset) {
+      for (var i = currentSection.getId(); i < getNumberOfSections(); ++i) {
+        if (getSection(i).workOffset != currentSection.workOffset) {
+          error(localize("WCS offset cannot change while using angle rotation compensation."));
+          return;
+        }
+      }
+    }
+    probeVariables.outputRotationCodes = false;
+  }
+}
+
 function protectedProbeMove(_cycle, x, y, z) {
   var _x = xOutput.format(x);
   var _y = yOutput.format(y);
   var _z = zOutput.format(z);
   if (_z && z >= getCurrentPosition().z) {
-    writeBlock(gFormat.format(65), "P" + 9810, _z, getFeed(cycle.feedrate));
+    writeBlock(gFormat.format(65), "P" + 9810, _z, getFeed(cycle.feedrate)); // protected positioning move
   }
   if (_x || _y) {
-    writeBlock(gFormat.format(65), "P" + 9810, _x, _y, getFeed(highFeedrate));
+    writeBlock(gFormat.format(65), "P" + 9810, _x, _y, getFeed(highFeedrate)); // protected positioning move
   }
   if (_z && z < getCurrentPosition().z) {
-    writeBlock(gFormat.format(65), "P" + 9810, _z, getFeed(cycle.feedrate));
+    writeBlock(gFormat.format(65), "P" + 9810, _z, getFeed(cycle.feedrate)); // protected positioning move
   }
 }
 
@@ -1347,7 +1407,7 @@ function defineMachine() {
   var useTCP = false; // 22MA doesn't support RTCP/G43.4, set to `true` for 220MA
 
   if (true) { // note: setup your machine here
-    var aAxis = createAxis({coordinate:0, table:true, axis:[1, 0, 0], range:[-360, 360], cyclic: true, preference:1, tcp:useTCP});
+    var aAxis = createAxis({coordinate:0, table:true, axis:[(getProperty("reverseAAxis") ? -1 : 1) * -1, 0, 0], range:[0, 360], cyclic: true, preference:1, tcp:useTCP});
     //var cAxis = createAxis({coordinate:2, table:true, axis:[0, 0, 1], range:[-360, 360], preference:0, tcp:useTCP});
     machineConfiguration = new MachineConfiguration(aAxis);
 
@@ -3091,16 +3151,6 @@ function writeDrillCycle(cycle, x, y, z) {
         getProbingArguments(cycle, true)
       );
       break;
-    case "probing-y-channel":
-      protectedProbeMove(cycle, x, y, z - cycle.depth);
-      writeBlock(
-        gFormat.format(65), "P" + 9812,
-        "Y" + xyzFormat.format(cycle.width1),
-        "Q" + xyzFormat.format(cycle.probeOvertravel),
-        // not required "R" + xyzFormat.format(cycle.probeClearance),
-        getProbingArguments(cycle, true)
-      );
-      break;
     case "probing-x-channel-with-island":
       protectedProbeMove(cycle, x, y, z);
       writeBlock(
@@ -3109,6 +3159,16 @@ function writeDrillCycle(cycle, x, y, z) {
         zOutput.format(z - cycle.depth),
         "Q" + xyzFormat.format(cycle.probeOvertravel),
         "R" + xyzFormat.format(-cycle.probeClearance),
+        getProbingArguments(cycle, true)
+      );
+      break;
+    case "probing-y-channel":
+      protectedProbeMove(cycle, x, y, z - cycle.depth);
+      writeBlock(
+        gFormat.format(65), "P" + 9812,
+        "Y" + xyzFormat.format(cycle.width1),
+        "Q" + xyzFormat.format(cycle.probeOvertravel),
+        // not required "R" + xyzFormat.format(cycle.probeClearance),
         getProbingArguments(cycle, true)
       );
       break;
@@ -3135,21 +3195,18 @@ function writeDrillCycle(cycle, x, y, z) {
       );
       break;
     case "probing-xy-circular-partial-boss":
-      writeComment("P9823 not pre-loaded in controller.");
-      writeComment("Skipping probing-xy-circular-partial-boss.");
-
-      // protectedProbeMove(cycle, x, y, z);
-      // writeBlock(
-      //   gFormat.format(65), "P" + 9823,
-      //   "A" + xyzFormat.format(cycle.partialCircleAngleA),
-      //   "B" + xyzFormat.format(cycle.partialCircleAngleB),
-      //   "C" + xyzFormat.format(cycle.partialCircleAngleC),
-      //   "D" + xyzFormat.format(cycle.width1),
-      //   "Z" + xyzFormat.format(z - cycle.depth),
-      //   "Q" + xyzFormat.format(cycle.probeOvertravel),
-      //   "R" + xyzFormat.format(cycle.probeClearance),
-      //   getProbingArguments(cycle, true)
-      // );
+      protectedProbeMove(cycle, x, y, z);
+      writeBlock(
+        gFormat.format(65), "P" + 9823,
+        "A" + xyzFormat.format(cycle.partialCircleAngleA),
+        "B" + xyzFormat.format(cycle.partialCircleAngleB),
+        "C" + xyzFormat.format(cycle.partialCircleAngleC),
+        "D" + xyzFormat.format(cycle.width1),
+        "Z" + xyzFormat.format(z - cycle.depth),
+        "Q" + xyzFormat.format(cycle.probeOvertravel),
+        "R" + xyzFormat.format(cycle.probeClearance),
+        getProbingArguments(cycle, true)
+      );
       break;
     case "probing-xy-circular-hole":
       protectedProbeMove(cycle, x, y, z - cycle.depth);
@@ -3162,19 +3219,16 @@ function writeDrillCycle(cycle, x, y, z) {
       );
       break;
     case "probing-xy-circular-partial-hole":
-      writeComment("P9823 not pre-loaded in controller.");
-      writeComment("Skipping probing-xy-circular-partial-hole.");
-
-      // protectedProbeMove(cycle, x, y, z - cycle.depth);
-      // writeBlock(
-      //   gFormat.format(65), "P" + 9823,
-      //   "A" + xyzFormat.format(cycle.partialCircleAngleA),
-      //   "B" + xyzFormat.format(cycle.partialCircleAngleB),
-      //   "C" + xyzFormat.format(cycle.partialCircleAngleC),
-      //   "D" + xyzFormat.format(cycle.width1),
-      //   "Q" + xyzFormat.format(cycle.probeOvertravel),
-      //   getProbingArguments(cycle, true)
-      // );
+      protectedProbeMove(cycle, x, y, z - cycle.depth);
+      writeBlock(
+        gFormat.format(65), "P" + 9823,
+        "A" + xyzFormat.format(cycle.partialCircleAngleA),
+        "B" + xyzFormat.format(cycle.partialCircleAngleB),
+        "C" + xyzFormat.format(cycle.partialCircleAngleC),
+        "D" + xyzFormat.format(cycle.width1),
+        "Q" + xyzFormat.format(cycle.probeOvertravel),
+        getProbingArguments(cycle, true)
+      );
       break;
     case "probing-xy-circular-hole-with-island":
       protectedProbeMove(cycle, x, y, z);
@@ -3188,39 +3242,16 @@ function writeDrillCycle(cycle, x, y, z) {
       );
       break;
     case "probing-xy-circular-partial-hole-with-island":
-      writeComment("P9823 not pre-loaded in controller.");
-      writeComment("Skipping probing-xy-circular-partial-hole-with-island.");
-
       // protectedProbeMove(cycle, x, y, z);
-      // writeBlock(
-      //   gFormat.format(65), "P" + 9823,
-      //   "Z" + xyzFormat.format(z - cycle.depth),
-      //   "A" + xyzFormat.format(cycle.partialCircleAngleA),
-      //   "B" + xyzFormat.format(cycle.partialCircleAngleB),
-      //   "C" + xyzFormat.format(cycle.partialCircleAngleC),
-      //   "D" + xyzFormat.format(cycle.width1),
-      //   "Q" + xyzFormat.format(cycle.probeOvertravel),
-      //   "R" + xyzFormat.format(-cycle.probeClearance),
-      //   getProbingArguments(cycle, true)
-      // );
-      break;
-    case "probing-xy-rectangular-hole":
-      protectedProbeMove(cycle, x, y, z - cycle.depth);
       writeBlock(
-        gFormat.format(65), "P" + 9812,
-        "X" + xyzFormat.format(cycle.width1),
+        gFormat.format(65), "P" + 9823,
+        "Z" + xyzFormat.format(z - cycle.depth),
+        "A" + xyzFormat.format(cycle.partialCircleAngleA),
+        "B" + xyzFormat.format(cycle.partialCircleAngleB),
+        "C" + xyzFormat.format(cycle.partialCircleAngleC),
+        "D" + xyzFormat.format(cycle.width1),
         "Q" + xyzFormat.format(cycle.probeOvertravel),
-        // not required "R" + xyzFormat.format(-cycle.probeClearance),
-        getProbingArguments(cycle, true)
-      );
-      // if (getProperty("useLiveConnection") && (typeof liveConnectionStoreResults == "function")) {
-      //   liveConnectionStoreResults();
-      // }
-      writeBlock(
-        gFormat.format(65), "P" + 9812,
-        "Y" + xyzFormat.format(cycle.width2),
-        "Q" + xyzFormat.format(cycle.probeOvertravel),
-        // not required "R" + xyzFormat.format(-cycle.probeClearance),
+        "R" + xyzFormat.format(-cycle.probeClearance),
         getProbingArguments(cycle, true)
       );
       break;
@@ -3246,6 +3277,26 @@ function writeDrillCycle(cycle, x, y, z) {
         getProbingArguments(cycle, true)
       );
       break;
+    case "probing-xy-rectangular-hole":
+        protectedProbeMove(cycle, x, y, z - cycle.depth);
+        writeBlock(
+          gFormat.format(65), "P" + 9812,
+          "X" + xyzFormat.format(cycle.width1),
+          "Q" + xyzFormat.format(cycle.probeOvertravel),
+          // not required "R" + xyzFormat.format(-cycle.probeClearance),
+          getProbingArguments(cycle, true)
+        );
+        // if (getProperty("useLiveConnection") && (typeof liveConnectionStoreResults == "function")) {
+        //   liveConnectionStoreResults();
+        // }
+        writeBlock(
+          gFormat.format(65), "P" + 9812,
+          "Y" + xyzFormat.format(cycle.width2),
+          "Q" + xyzFormat.format(cycle.probeOvertravel),
+          // not required "R" + xyzFormat.format(-cycle.probeClearance),
+          getProbingArguments(cycle, true)
+        );
+        break;
     case "probing-xy-rectangular-hole-with-island":
       protectedProbeMove(cycle, x, y, z);
       writeBlock(
@@ -3269,31 +3320,28 @@ function writeDrillCycle(cycle, x, y, z) {
       );
       break;
     case "probing-xy-inner-corner":
-      writeComment("P9815 not pre-loaded in controller.");
-      writeComment("Skipping probing-xy-inner-corner.");
-
-      // var cornerX = x + approach(cycle.approach1) * (cycle.probeClearance + tool.diameter / 2);
-      // var cornerY = y + approach(cycle.approach2) * (cycle.probeClearance + tool.diameter / 2);
-      // var cornerI = 0;
-      // var cornerJ = 0;
-      // if (cycle.probeSpacing !== undefined) {
-      //   cornerI = cycle.probeSpacing;
-      //   cornerJ = cycle.probeSpacing;
-      // }
-      // if ((cornerI != 0) && (cornerJ != 0)) {
-      //   if (currentSection.strategy == "probe") {
-      //     setProbeAngleMethod();
-      //     probeVariables.compensationXY = "X[#185] Y[#186]";
-      //   }
-      // }
-      // protectedProbeMove(cycle, x, y, z - cycle.depth);
-      // writeBlock(
-      //   gFormat.format(65), "P" + 9815, xOutput.format(cornerX), yOutput.format(cornerY),
-      //   conditional(cornerI != 0, "I" + xyzFormat.format(cornerI)),
-      //   conditional(cornerJ != 0, "J" + xyzFormat.format(cornerJ)),
-      //   "Q" + xyzFormat.format(cycle.probeOvertravel),
-      //   getProbingArguments(cycle, true)
-      // );
+      var cornerX = x + approach(cycle.approach1) * (cycle.probeClearance + tool.diameter / 2);
+      var cornerY = y + approach(cycle.approach2) * (cycle.probeClearance + tool.diameter / 2);
+      var cornerI = 0;
+      var cornerJ = 0;
+      if (cycle.probeSpacing !== undefined) {
+        cornerI = cycle.probeSpacing;
+        cornerJ = cycle.probeSpacing;
+      }
+      if ((cornerI != 0) && (cornerJ != 0)) {
+        if (currentSection.strategy == "probe") {
+          setProbeAngleMethod();
+          probeVariables.compensationXY = "X[#185] Y[#186]";
+        }
+      }
+      protectedProbeMove(cycle, x, y, z - cycle.depth);
+      writeBlock(
+        gFormat.format(65), "P" + 9815, xOutput.format(cornerX), yOutput.format(cornerY),
+        conditional(cornerI != 0, "I" + xyzFormat.format(cornerI)),
+        conditional(cornerJ != 0, "J" + xyzFormat.format(cornerJ)),
+        "Q" + xyzFormat.format(cycle.probeOvertravel),
+        getProbingArguments(cycle, true)
+      );
       break;
     case "probing-xy-outer-corner":
       var cornerX = x + approach(cycle.approach1) * (cycle.probeClearance + tool.diameter / 2);
@@ -3318,6 +3366,36 @@ function writeDrillCycle(cycle, x, y, z) {
         "Q" + xyzFormat.format(cycle.probeOvertravel),
         getProbingArguments(cycle, true)
       );
+      break;
+    case "probing-x-plane-angle":
+      protectedProbeMove(cycle, x, y, z - cycle.depth);
+      writeBlock(
+        gFormat.format(65), "P" + 9843,
+        "X" + xyzFormat.format(x + approach(cycle.approach1) * (cycle.probeClearance + tool.diameter / 2)),
+        "D" + xyzFormat.format(cycle.probeSpacing),
+        "Q" + xyzFormat.format(cycle.probeOvertravel),
+        "A" + xyzFormat.format(cycle.nominalAngle != undefined ? cycle.nominalAngle : 90),
+        getProbingArguments(cycle, false)
+      );
+      if (currentSection.strategy == "probe") {
+        setProbeAngleMethod();
+        probeVariables.compensationXY = "X" + xyzFormat.format(0) + " Y" + xyzFormat.format(0);
+      }
+      break;
+    case "probing-y-plane-angle":
+      protectedProbeMove(cycle, x, y, z - cycle.depth);
+      writeBlock(
+        gFormat.format(65), "P" + 9843,
+        "Y" + xyzFormat.format(y + approach(cycle.approach1) * (cycle.probeClearance + tool.diameter / 2)),
+        "D" + xyzFormat.format(cycle.probeSpacing),
+        "Q" + xyzFormat.format(cycle.probeOvertravel),
+        "A" + xyzFormat.format(cycle.nominalAngle != undefined ? cycle.nominalAngle : 0),
+        getProbingArguments(cycle, false)
+      );
+      if (currentSection.strategy == "probe") {
+        setProbeAngleMethod();
+        probeVariables.compensationXY = "X" + xyzFormat.format(0) + " Y" + xyzFormat.format(0);
+      }
       break;
     default:
       expandCyclePoint(x, y, z);
