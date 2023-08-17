@@ -71,7 +71,7 @@ properties = {
       {title:"No", id:"false"},
       {title:"Only on tool change", id:"toolChange"}
     ],
-    value: "true",
+    value: "false",
     scope: "post"
   },
   sequenceNumberStart: {
@@ -226,6 +226,14 @@ properties = {
     value      : false,
     scope      : "post"
   },
+  useDPMFeeds: {
+    title      : "useDPMFeeds",
+    description: "useDPMFeeds.",
+    group      : "preferences",
+    type       : "boolean",
+    value      : true,
+    scope      : "post"
+  },
   endOfProgramTableX: {
     title      : "Table X position at end of program",
     description: "Determines the X axis table position at the end of the program",
@@ -237,6 +245,14 @@ properties = {
   endOfProgramTableY: {
     title      : "Table Y position at end of program",
     description: "Determines the Y axis table position at the end of the program",
+    group      : "preferences",
+    type       : "number",
+    value      : 0.0,
+    scope      : "post"
+  },
+  endOfProgramTableA: {
+    title      : "4th Rotary position at end of program",
+    description: "Determines the rotary table position at the end of the program",
     group      : "preferences",
     type       : "number",
     value      : 0.0,
@@ -403,7 +419,7 @@ var settings = {
     cancelTiltFirst       : true, // cancel tilted workplane prior to WCS (G54-G59) blocks
     useABCPrepositioning  : true, // position ABC axes prior to tilted workplane blocks
     forceMultiAxisIndexing: false, // force multi-axis indexing for 3D programs
-    optimizeType          : undefined // can be set to OPTIMIZE_NONE, OPTIMIZE_BOTH, OPTIMIZE_TABLES, OPTIMIZE_HEADS, OPTIMIZE_AXIS. 'undefined' uses legacy rotations
+    optimizeType          : OPTIMIZE_TABLES // can be set to OPTIMIZE_NONE, OPTIMIZE_BOTH, OPTIMIZE_TABLES, OPTIMIZE_HEADS, OPTIMIZE_AXIS. 'undefined' uses legacy rotations
   },
   subprograms: {
     initialSubprogramNumber: 9000, // specifies the initial number to be used for subprograms. 'undefined' uses the main program number
@@ -870,12 +886,15 @@ function onClose() {
   writeRetract(Z); // retract
   setSmoothing(false);
 
-  // G53 G0 G90 X-7.5 Y0.
+  onCommand(COMMAND_UNLOCK_MULTI_AXIS);
+  // G53 G0 G90 X-7.5 Y0. A0.
   writeBlock(gFormat.format(53),
              gAbsIncModal.format(90),
              gMotionModal.format(0),
              xOutput.format(getProperty("endOfProgramTableX")),
-             yOutput.format(getProperty("endOfProgramTableY")));
+             yOutput.format(getProperty("endOfProgramTableY")),
+             aOutput.format(Math.PI / (180/getProperty("endOfProgramTableA"))));
+  onCommand(COMMAND_LOCK_MULTI_AXIS);
   // forceWorkPlane();
   // setWorkPlane(new Vector(0, 0, 0)); // reset working plane
   // writeRetract(X, Y); // return to home
@@ -1328,7 +1347,7 @@ function defineMachine() {
   var useTCP = false; // 22MA doesn't support RTCP/G43.4, set to `true` for 220MA
 
   if (true) { // note: setup your machine here
-    var aAxis = createAxis({coordinate:0, table:true, axis:[1, 0, 0], range:[-180, 180], cyclic: true, preference:1, tcp:useTCP});
+    var aAxis = createAxis({coordinate:0, table:true, axis:[1, 0, 0], range:[-360, 360], cyclic: true, preference:1, tcp:useTCP});
     //var cAxis = createAxis({coordinate:2, table:true, axis:[0, 0, 1], range:[-360, 360], preference:0, tcp:useTCP});
     machineConfiguration = new MachineConfiguration(aAxis);
 
@@ -2597,10 +2616,10 @@ function setWorkPlane(abc) {
       if (abc.isNonZero()) {
         gRotationModal.reset();
         writeBlock(
-          gRotationModal.format(68), "X" + xyzFormat.format(currentSection.workOrigin.x), "Y" + xyzFormat.format(currentSection.workOrigin.y), "Z" + xyzFormat.format(currentSection.workOrigin.z),
+          gRotationModal.format(68.2), "X" + xyzFormat.format(currentSection.workOrigin.x), "Y" + xyzFormat.format(currentSection.workOrigin.y), "Z" + xyzFormat.format(currentSection.workOrigin.z),
           "I" + abcFormat.format(abc.x), "J" + abcFormat.format(abc.y), "K" + abcFormat.format(abc.z)
-        ); // set frame, use G68 instead of G68.2 since G68.2 is an optional feature not available on most machines
-        writeBlock(gFormat.format(53)); // turn machine, use G53 in conjunction with G68 command above
+        ); // set frame
+        writeBlock(gFormat.format(53.2)); // turn machine
       } else {
         if (!settings.workPlaneMethod.cancelTiltFirst) {
           cancelWorkPlane();
