@@ -9,7 +9,7 @@ A new branch, `newpost-4th` is introduced to work on the support for 4th axis, a
 | Branch      | Description          |
 | ----------- | -------------------- |
 | main        | Based on 44013       |
-| newpost-4th | Based on 44078       |
+| newpost-4th | Based on 44083       |
 
 The development has been paused for `main` branch, and active development is underway for `newpost-4th` branch.
 
