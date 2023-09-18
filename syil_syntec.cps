@@ -196,7 +196,7 @@ properties = {
   },
   useDPMFeeds: {
     title      : "useDPMFeeds",
-    description: "useDPMFeeds.",
+    description: "When set to true, use degree-per-minute feed mode, otherwise use inverse time.",
     group      : "preferences",
     type       : "boolean",
     value      : false,
