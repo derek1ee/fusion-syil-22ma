@@ -231,7 +231,7 @@ properties = {
     description: "Detect broken tool",
     group      : "preferences",
     type       : "boolean",
-    value      : true,
+    value      : false,
     scope      : "post"
   },
   toolSetterMarcoType: {
