@@ -17,7 +17,7 @@ legal = "Copyright (C) 2012-2023 by Autodesk, Inc.";
 certificationLevel = 2;
 minimumRevision = 45917;
 
-longDescription = "Syntec Milling post for Syil machines. This is an unofficial post modified by Derek Li and published at https://github.com/derek1ee/fusion-syil-22ma, use at your own risk. NOTE: HSHP parameters must be defined in the control before using the High Precision mode. The 'Machining Condition' property can be used to choose from the P1,P2,P3 High Precision modes.";
+longDescription = "Unofficial Syntec Milling post for Syil machines. This is an unofficial post modified by Derek Li and published at https://github.com/derek1ee/fusion-syil-22ma, use at your own risk. NOTE: HSHP parameters must be defined in the control before using the High Precision mode. The 'Machining Condition' property can be used to choose from the P1,P2,P3 High Precision modes.";
 
 extension = "nc";
 programNameIsInteger = true;
@@ -2000,6 +2000,24 @@ properties.writeTools = {
   scope      : "post"
 };
 function writeProgramHeader() {
+  var path = getOutputPath();
+  writeComment("FILE NAME - " + path.substring(path.lastIndexOf("\\"), path.length));
+  
+
+  var d = new Date(); // output current date and time
+  writeComment(localize("Posted on - " ) + d.toLocaleDateString() + " " + d.getHours() + "H " + d.getMinutes() + "M");
+
+  var eos = longDescription.indexOf(".");
+  writeComment(localize("Post Proc - ") + ((eos == -1) ? longDescription : longDescription.substr(0, eos + 1)));
+  
+  if ((typeof getHeaderVersion == "function") && getHeaderVersion()) {
+    writeComment(localize("Post vers - ") + getHeaderVersion());
+  }
+
+  if ((typeof getHeaderDate == "function") && getHeaderDate()) {
+    writeComment(localize("Post modified - ") + ": " + getHeaderDate());
+  }
+
   // dump machine configuration
   var vendor = machineConfiguration.getVendor();
   var model = machineConfiguration.getModel();
@@ -2007,7 +2025,7 @@ function writeProgramHeader() {
   if (getProperty("writeMachine") && (vendor || model || mDescription)) {
     writeComment(localize("Machine"));
     if (vendor) {
-      writeComment("  " + localize("vendor") + ": " + vendor);
+      ("  " + localize("vendor") + ": " + vendor);
     }
     if (model) {
       writeComment("  " + localize("model") + ": " + model);
@@ -2041,8 +2059,11 @@ function writeProgramHeader() {
         for (var i = 0; i < tools.getNumberOfTools(); ++i) {
           var tool = tools.getTool(i);
           var comment = "T" + toolFormat.format(tool.number) + " " +
-          "D=" + xyzFormat.format(tool.diameter) + " " +
-          localize("CR") + "=" + xyzFormat.format(tool.cornerRadius);
+                        "DIA=" + xyzFormat.format(tool.diameter) + " " +
+                        "RADIUS=" + xyzFormat.format(tool.diameter)/2.0 + " ";
+          if (tool.cornerRadius != 0) {
+            comment += "CORNER RAD" + "=" + xyzFormat.format(tool.cornerRadius);
+          }
           if ((tool.taperAngle > 0) && (tool.taperAngle < Math.PI)) {
             comment += " " + localize("TAPER") + "=" + taperFormat.format(tool.taperAngle) + localize("deg");
           }
