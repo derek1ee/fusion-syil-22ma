@@ -1267,13 +1267,6 @@ function onRadiusCompensation() {
   }
 }
 
-function onPassThrough(text) {
-  var commands = String(text).split(",");
-  for (text in commands) {
-    writeBlock(commands[text]);
-  }
-}
-
 function forceModals() {
   if (arguments.length == 0) { // reset all modal variables listed below
     if (typeof gMotionModal != "undefined") {
