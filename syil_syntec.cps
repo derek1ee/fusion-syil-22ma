@@ -158,10 +158,18 @@ properties = {
     value      : false,
     scope      : "post"
   },
+  useAAxis: {
+    title      : "Use 4th/A-axis",
+    description: "Whether the machine has 4th rotary/A-axis isntalled",
+    group      : "multiAxis",
+    type       : "boolean",
+    value      : false,
+    scope      : "post"
+  },
   reverseAAxis: {
     title      : "Reverse A-axis",
     description: "Makes the A-axis rotate the opposite way.",
-    group      : "configuration",
+    group      : "multiAxis",
     type       : "boolean",
     value      : false,
     scope      : "post"
@@ -548,6 +556,10 @@ function onSection() {
   // write parametric feedrate table
   if (typeof initializeParametricFeeds == "function") {
     initializeParametricFeeds(insertToolCall);
+  }
+
+  if (isProbeOperation()) {
+    onCommand(COMMAND_PROBE_ON);
   }
 
   if (subprogramsAreSupported()) {
@@ -1399,7 +1411,7 @@ var compensateToolLength = false; // add the tool length to the pivot distance f
 function defineMachine() {
   var useTCP = false; // Syil machines with 22MA doesn't have RTCP/G43.4 option enabled by default
 
-  if (true) { // note: setup your machine here
+  if (getProperty('useAAxis')) { // note: setup your machine here
     var aAxis = createAxis({coordinate:0, table:true, axis:[(getProperty("reverseAAxis") ? -1 : 1) * -1, 0, 0], range:[0, 360], cyclic: true, preference:1, tcp:useTCP});
     //var cAxis = createAxis({coordinate:2, table:true, axis:[0, 0, 1], range:[-360, 360], preference:0, tcp:useTCP});
     machineConfiguration = new MachineConfiguration(aAxis);
