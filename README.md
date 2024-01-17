@@ -6,10 +6,10 @@ The post processor will be using inverse-time feed mode for A-axis by default, b
 
 | Feature                                  | Notes                          |
 | ---------------------------------------- | ------------------------------ |
-| 4th axis                                 | Default to `inverse time` feed |
+| 4th axis                                 | Default to `OFF`, turn on via `Use 4th/A-axis` setting in post config |
 | Turn on coolant early                    | Coolant on before G0 move      |
 | In process probing                       | Uses Renishaw macros           |
-| Custom table position                    | Configurable when posting      |
+| Custom table position                    | Configurable when posting, incl. A-axis      |
 | NC passthrough                           |                                |
 | In process tool measure & break control  | Configurable via Fusion tool library, manual NC, or enable for all in post                    |
 | M7 air blast                             | |
