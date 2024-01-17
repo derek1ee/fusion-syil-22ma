@@ -234,6 +234,30 @@ properties = {
     value      : 0.0,
     scope      : "post"
   },
+  useSafeToolChangePosition: {
+    title      : "4th Rotary position at end of program",
+    description: "Whether to send the table (X, Y) to a safe position before tool change",
+    group      : "preferences",
+    type       : "boolean",
+    value      : false,
+    scope      : "post"
+  },
+  safeToolChangeTableX: {
+    title      : "Table X position at end of program",
+    description: "Determines the X axis table position at the end of the program",
+    group      : "preferences",
+    type       : "number",
+    value      : -7.5,
+    scope      : "post"
+  },
+  safeToolChangeTableY: {
+    title      : "Table Y position at end of program",
+    description: "Determines the Y axis table position at the end of the program",
+    group      : "preferences",
+    type       : "number",
+    value      : 0.0,
+    scope      : "post"
+  },
   breakControl: {
     title      : "Break control",
     description: "Detect broken tool",
@@ -524,7 +548,7 @@ function onSection() {
     writeSectionNotes();
   }
 
-  // tool change
+  // Tool change
   writeToolCall(tool, insertToolCall);
   startSpindle(tool, insertToolCall);
 
@@ -1592,6 +1616,16 @@ function writeToolCall(tool, insertToolCall) {
     if (!retracted) {
       writeRetract(Z);
     }
+
+    if (getProperty("useSafeToolChangePosition")) {
+        // Move table to safe tool change position
+        writeBlock(gFormat.format(53),
+                  gAbsIncModal.format(90),
+                  gMotionModal.format(0),
+                  xOutput.format(getProperty("safeToolChangeTableX")),
+                  yOutput.format(getProperty("safeToolChangeTableY")));
+    }
+
     if (!isFirstSection() && insertToolCall) {
       if (typeof forceWorkPlane == "function") {
         forceWorkPlane();
