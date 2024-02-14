@@ -779,6 +779,7 @@ function onCommand(command) {
       } else if (numberOfAxes == 5) {
         writeBlock(mClampModal.format(11), mClampModal.format(111)); // // unlock 4th & 5th-axis motion
       }
+      writeBlock(gFormat.format(4), xOutput.format(1));
     }
     return;
   case COMMAND_START_CHIP_TRANSPORT:
