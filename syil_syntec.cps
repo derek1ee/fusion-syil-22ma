@@ -6,8 +6,8 @@
   Modified by Derek Li.
   https://github.com/derek1ee/fusion-syil-22ma
 
-  $Revision: 44084 $
-  $Date: 2023-08-17 $
+  $Revision: 44085 $
+  $Date: 2024-01-17 $
 */
 
 description = "Unofficial Post for Syil w/ Syntec Controller";
@@ -211,25 +211,49 @@ properties = {
     scope      : "post"
   },
   endOfProgramTableX: {
-    title      : "Table X position at end of program",
+    title      : "End of program table position X",
     description: "Determines the X axis table position at the end of the program",
-    group      : "preferences",
+    group      : "homePositions",
     type       : "number",
     value      : -7.5,
     scope      : "post"
   },
   endOfProgramTableY: {
-    title      : "Table Y position at end of program",
+    title      : "End of program table position Y",
     description: "Determines the Y axis table position at the end of the program",
-    group      : "preferences",
+    group      : "homePositions",
     type       : "number",
     value      : 0.0,
     scope      : "post"
   },
   endOfProgramTableA: {
-    title      : "4th Rotary position at end of program",
+    title      : "End of program table position A",
     description: "Determines the rotary table position at the end of the program",
-    group      : "preferences",
+    group      : "homePositions",
+    type       : "number",
+    value      : 0.0,
+    scope      : "post"
+  },
+  useSafeToolChangePosition: {
+    title      : "Safe tool change position enable",
+    description: "Whether to send the table (X, Y) to a safe position before tool change",
+    group      : "homePositions",
+    type       : "boolean",
+    value      : false,
+    scope      : "post"
+  },
+  safeToolChangeTableX: {
+    title      : "Safe tool change position X",
+    description: "X axis table position during tool change",
+    group      : "homePositions",
+    type       : "number",
+    value      : -15.0,
+    scope      : "post"
+  },
+  safeToolChangeTableY: {
+    title      : "Safe tool change position Y",
+    description: "Y axis table position during tool change",
+    group      : "homePositions",
     type       : "number",
     value      : 0.0,
     scope      : "post"
@@ -524,7 +548,7 @@ function onSection() {
     writeSectionNotes();
   }
 
-  // tool change
+  // Tool change
   writeToolCall(tool, insertToolCall);
   startSpindle(tool, insertToolCall);
 
@@ -1592,6 +1616,16 @@ function writeToolCall(tool, insertToolCall) {
     if (!retracted) {
       writeRetract(Z);
     }
+
+    if (getProperty("useSafeToolChangePosition")) {
+        // Move table to safe tool change position
+        writeBlock(gFormat.format(53),
+                  gAbsIncModal.format(90),
+                  gMotionModal.format(0),
+                  xOutput.format(getProperty("safeToolChangeTableX")),
+                  yOutput.format(getProperty("safeToolChangeTableY")));
+    }
+
     if (!isFirstSection() && insertToolCall) {
       if (typeof forceWorkPlane == "function") {
         forceWorkPlane();
