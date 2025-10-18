@@ -7,9 +7,8 @@
   https://github.com/derek1ee/fusion-syil-22ma
 
   $Revision: 44196 $
+  $Base: 44195 $
   $Date: 2025-10-18 $
-
-  FORKID {78441FCF-1C1F-4D81-BFA8-AAF6F30E1F3B}
 */
 
 description = "Unofficial Post for Syil w/ Syntec Controller";
@@ -406,6 +405,7 @@ var settings = {
     eulerCalculationMethod: "standard", // ('standard' / 'machine') 'machine' adjusts euler angles to match the machines ABC orientation, machine configuration required
     cancelTiltFirst       : true, // cancel tilted workplane prior to WCS (G54-G59) blocks
     forceMultiAxisIndexing: false, // force multi-axis indexing for 3D programs
+    useABCPrepositioning  : true, // position ABC axes prior to tilted workplane blocks
     optimizeType          : OPTIMIZE_AXIS // can be set to OPTIMIZE_NONE, OPTIMIZE_BOTH, OPTIMIZE_TABLES, OPTIMIZE_HEADS, OPTIMIZE_AXIS. 'undefined' uses legacy rotations
   },
   subprograms: {
@@ -690,6 +690,10 @@ function onSection() {
   var isRequired = insertToolCall || state.retractedZ || !state.lengthCompensationActive || (!isFirstSection() && getPreviousSection().isMultiAxis());
   writeInitialPositioning(initialPosition, isRequired);
 
+  if (isProbeOperation()) {
+    onCommand(COMMAND_PROBE_ON);
+  }
+
   if (subprogramsAreSupported()) {
     subprogramDefine(initialPosition, abc); // define subprogram
   }
@@ -801,10 +805,12 @@ function onCommand(command) {
   case COMMAND_TOOL_MEASURE:
     return;
   case COMMAND_PROBE_ON:
+    // writeBlock(gFormat.format(65), "P" + 9832); // Turn on probe
     writeBlock(mFormat.format(80)); // probe on
     writeBlock(mFormat.format(19)); // spindle orient
     return;
   case COMMAND_PROBE_OFF:
+    // writeBlock(gFormat.format(65), "P" + 9833); // Turn off probe
     writeBlock(mFormat.format(81)); // probe off
     return;
   }
